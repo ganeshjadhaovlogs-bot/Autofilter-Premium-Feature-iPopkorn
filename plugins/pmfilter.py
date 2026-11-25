@@ -957,18 +957,19 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data.startswith("checksub"):
         try:
-            # Split only on the first two separators; file_ids may contain underscores.
+            # Callback format: checksub#<start-prefix>#<chat_id>_<file_id>
             parts = query.data.split("#", 2)
-            if len(parts) != 3 or not parts[1] or not parts[2]:
+            if len(parts) != 3 or not parts[1] or "_" not in parts[2]:
                 await query.answer(
                     "⚠️ This button is invalid or expired. Please open the movie link again.",
                     show_alert=True
                 )
                 return
 
-            _, chat_id, file_id = parts
+            _, start_prefix, file_payload = parts
+            chat_part, file_id = file_payload.split("_", 1)
             try:
-                chat_id = int(chat_id)
+                chat_id = int(chat_part)
             except (TypeError, ValueError):
                 await query.answer(
                     "⚠️ This button is invalid or expired. Please open the movie link again.",
@@ -987,7 +988,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             if btn:
                 btn.append([InlineKeyboardButton(
                     "🔄 ᴛʀʏ ᴀɢᴀɪɴ",
-                    callback_data=f"checksub#{chat_id}#{file_id}"
+                    callback_data=f"checksub#{start_prefix}#{file_payload}"
                 )])
                 try:
                     await query.edit_message_reply_markup(
@@ -1003,7 +1004,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 )
                 return
 
-            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={chat_id}_{file_id}")
+            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={start_prefix}_{file_payload}")
             await query.message.delete()
         except Exception as e:
             logger.exception("Error in checksub callback")
