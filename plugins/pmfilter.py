@@ -863,7 +863,13 @@ async def cb_handler(client: Client, query: CallbackQuery):
         link = await client.create_chat_invite_link(int(REQST_CHANNEL))
     except:
         pass
-    if query.data == "close_data":
+    if query.data == "fsub_retry":
+        await query.answer(
+            "Channel verification could not complete. Please try the file link again in a moment.",
+            show_alert=True
+        )
+
+    elif query.data == "close_data":
         try:
             user = query.message.reply_to_message.from_user.id
         except:
@@ -1004,6 +1010,8 @@ async def cb_handler(client: Client, query: CallbackQuery):
             btn += await is_req_subscribed(client, query.from_user.id, AUTH_REQ_CHANNELS)
 
             if btn:
+                # Keep the user list in sync when a user no longer has channel access.
+                await db.delete_user(query.from_user.id)
                 callback_payload = f"{chat_id}_{file_id}"
                 btn.append([InlineKeyboardButton(
                     "🔄 ᴛʀʏ ᴀɢᴀɪɴ",
