@@ -54,23 +54,37 @@ async def fetch_image(url, size=(860, 1200)):
                     logger.error("Poster URL returned an empty response: %s", url[:180])
                     return None
 
-                # Always use the requested poster-card layout: a blurred, enlarged
-                # copy fills the 16:9 canvas while the complete original artwork
-                # stays centered and uncropped in the foreground (like the reference).
                 source = Image.open(BytesIO(data)).convert("RGB")
                 target_w, target_h = size
-                background = ImageOps.fit(
-                    source, size, method=Image.Resampling.LANCZOS
-                ).filter(ImageFilter.GaussianBlur(radius=24))
-                foreground = ImageOps.contain(
-                    source,
-                    (int(target_w * 0.62), int(target_h * 0.92)),
-                    method=Image.Resampling.LANCZOS
-                )
-                x = (target_w - foreground.width) // 2
-                y = (target_h - foreground.height) // 2
-                background.paste(foreground, (x, y))
-                img = background
+                aspect_ratio = source.width / max(source.height, 1)
+
+                if aspect_ratio >= 1.35:
+                    # TMDB landscape backdrops (e.g. 1200x675) are already
+                    # channel thumbnails. Show the complete image edge-to-edge:
+                    # no portrait overlay, no blurred side panels.
+                    img = ImageOps.contain(
+                        source, size, method=Image.Resampling.LANCZOS
+                    )
+                    canvas = Image.new("RGB", size, (0, 0, 0))
+                    x = (target_w - img.width) // 2
+                    y = (target_h - img.height) // 2
+                    canvas.paste(img, (x, y))
+                    img = canvas
+                else:
+                    # Keep the existing portrait-poster treatment only when
+                    # TMDB has no landscape backdrop available.
+                    background = ImageOps.fit(
+                        source, size, method=Image.Resampling.LANCZOS
+                    ).filter(ImageFilter.GaussianBlur(radius=24))
+                    foreground = ImageOps.contain(
+                        source,
+                        (int(target_w * 0.62), int(target_h * 0.92)),
+                        method=Image.Resampling.LANCZOS
+                    )
+                    x = (target_w - foreground.width) // 2
+                    y = (target_h - foreground.height) // 2
+                    background.paste(foreground, (x, y))
+                    img = background
                 out = BytesIO()
                 img.save(out, format="JPEG", quality=96, subsampling=0)
                 out.seek(0)
