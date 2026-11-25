@@ -635,13 +635,21 @@ async def get_movie_detailsx(query, id=False, file=None):
         if language.get("english_name") or language.get("name")
     ]
 
-    providers = ((watch_data or {}).get("results") or {}).get("IN") or {}
+    # Include subscription, free/ad-supported AND rent/buy services for India.
+    # TMDB often lists a title only under rent/buy, so limiting this to flatrate
+    # incorrectly displayed OTT as N/A even when a provider was available.
+    provider_results = (watch_data or {}).get("results") or {}
+    providers = provider_results.get("IN") or {}
     ott_names = sorted({
         provider.get("provider_name")
-        for category in ("flatrate", "free", "ads")
+        for category in ("flatrate", "free", "ads", "rent", "buy")
         for provider in providers.get(category, [])
         if provider.get("provider_name")
     })
+    if not providers:
+        logger.info("TMDB has no India watch-provider data for %r", raw_query)
+    elif not ott_names:
+        logger.info("TMDB has no India streaming/rent/buy providers for %r", raw_query)
 
     images = data.get("images") or {}
     language_code = data.get("original_language")
