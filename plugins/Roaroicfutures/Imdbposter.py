@@ -342,7 +342,7 @@ async def _get_imdb_online_metadata(query, year=None, imdb_id=None):
                 html = await response.text(errors="ignore")
 
         scripts = re.findall(
-            r'<script[^>]+type=["\\']application/ld\\+json["\\'][^>]*>(.*?)</script>',
+            r"<script[^>]+type=['\"]application/ld\\+json['\"][^>]*>(.*?)</script>",
             html, flags=re.I | re.S
         )
         objects = []
