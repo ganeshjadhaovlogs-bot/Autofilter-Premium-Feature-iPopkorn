@@ -105,27 +105,38 @@ async def is_req_subscribed(bot, user_id, rqfsub_channels):
 
 async def is_subscribed(bot, user_id, fsub_channels):
     btn = []
-    
+
     async def check_channel(channel_id):
         try:
-            # Current membership always takes priority over an old request record.
             member = await bot.get_chat_member(channel_id, user_id)
             if member.status != enums.ChatMemberStatus.BANNED:
+                await db.remove_join_req(user_id, channel_id)
                 return None
         except UserNotParticipant:
-            # A submitted join request is accepted as pending until the channel
-            # admin approves or declines it.
-            if await db.has_joined_channel(user_id, channel_id):
-                return None
+            pass
         except Exception as e:
-            logger.exception(f"is_subscribed error for {channel_id}: {e}")
-            return None
+            logger.error(f"Membership lookup failed for {channel_id}: {e}")
+
+        # A database record is not enough: verify the request is still pending
+        # on Telegram so users who left or whose request was declined are blocked.
+        try:
+            pending_requests = await bot.get_chat_join_requests(
+                channel_id, query=str(user_id), limit=100
+            )
+            if any(
+                getattr(getattr(request, "user", None), "id", None) == user_id
+                for request in pending_requests
+            ):
+                await db.add_join_req(user_id, channel_id)
+                return None
+            await db.remove_join_req(user_id, channel_id)
+        except Exception as e:
+            logger.warning(f"Could not verify pending request for {channel_id}: {e}")
 
         try:
             chat = await bot.get_chat(int(channel_id))
             invite_link = await bot.create_chat_invite_link(
-                channel_id,
-                creates_join_request=True
+                channel_id, creates_join_request=True
             )
             return InlineKeyboardButton(
                 f"📨 Request to Join {chat.title}",
@@ -141,7 +152,7 @@ async def is_subscribed(bot, user_id, fsub_channels):
     for button in results:
         if button:
             btn.append([button])
-            
+
     return btn
 
 async def is_check_admin(bot, chat_id, user_id):
