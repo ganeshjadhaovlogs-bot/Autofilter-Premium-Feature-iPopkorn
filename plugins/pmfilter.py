@@ -1011,53 +1011,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
                             f"<b>ᴅᴇʟᴇᴛɪɴɢ ꜰɪʟᴇs... {deleted} files deleted. Please wait...</b>"
                         )
 
-                # Keep the channel announcement in sync with the files still in DB.
-                deleted_keys = {
-                    re.sub(r"[^a-z0-9]+", " ", str(name).lower()).strip()
-                    for name in deleted_names
-                }
-                if deleted_keys:
-                    async for movie_doc in db.movie_updates.find({}):
-                        movie_files = movie_doc.get("files", [])
-                        remaining_files = [
-                            item for item in movie_files
-                            if re.sub(
-                                r"[^a-z0-9]+", " ",
-                                str(item.get("filename", "")).lower()
-                            ).strip() not in deleted_keys
-                        ]
-                        if len(remaining_files) == len(movie_files):
-                            continue
-
-                        base_name = movie_doc["_id"]
-                        if remaining_files:
-                            await db.movie_updates.update_one(
-                                {"_id": base_name},
-                                {"$set": {"files": remaining_files}}
-                            )
-                            try:
-                                from plugins.channel import update_movie_message
-                                await update_movie_message(client, base_name)
-                            except Exception:
-                                logger.exception(
-                                    "Could not update channel announcement for %s", base_name
-                                )
-                        else:
-                            message_id = movie_doc.get("message_id")
-                            if message_id:
-                                try:
-                                    await client.delete_messages(
-                                        chat_id=MOVIE_UPDATE_CHANNEL,
-                                        message_ids=message_id
-                                    )
-                                except Exception:
-                                    # Keep the movie record if its channel post could not
-                                    # be removed, so a later retry/re-upload won't orphan it.
-                                    logger.exception(
-                                        "Could not delete channel announcement for %s", base_name
-                                    )
-                                    continue
-                            await db.movie_updates.delete_one({"_id": base_name})
+                if deleted_names:
+                    from plugins.channel import sync_movie_updates_after_file_delete
+                    await sync_movie_updates_after_file_delete(client, deleted_names)
 
             except Exception as e:
                 logger.exception("Error in killfilesdq")
