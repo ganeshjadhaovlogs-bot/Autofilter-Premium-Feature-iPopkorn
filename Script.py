@@ -231,9 +231,7 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 🎬 ǫᴜᴀʟɪᴛʏ : <b>{quality}</b>
 🎧 ᴀᴜᴅɪᴏ    : <b>{language}</b>
 🌟 ʀᴀᴛɪɴɢ   : <b>{rating}</b>                     
-{episodes}
-</blockquote>─┉─•✦•─┉─
-
+{episodes}</blockquote>─┉─•✦•─┉─
 
 <b>🔍 Sᴇᴀʀᴄʜ → {search_link} 🔍</b>
 """
