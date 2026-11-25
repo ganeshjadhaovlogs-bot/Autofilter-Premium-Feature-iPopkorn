@@ -92,19 +92,29 @@ async def roaroicbot_start():
             f"Could not send restart message to LOG_CHANNEL ({LOG_CHANNEL}): {type(e).__name__}: {e}. "
             "Check that LOG_CHANNEL is the full id (starts with -100), and that the bot is added as an admin in that channel."
         )
-    app = web.AppRunner(await web_server())
-    await app.setup()
-    bind_address = "0.0.0.0"
-    await web.TCPSite(app, bind_address, PORT).start()
     roaroicbot.loop.create_task(keep_alive())
     await idle()
     
+async def start_web_server():
+    """Bind Render's HTTP health/stream server before Telegram startup."""
+    app = web.AppRunner(await web_server())
+    await app.setup()
+    await web.TCPSite(app, "0.0.0.0", PORT).start()
+    logging.info("HTTP server listening on 0.0.0.0:%s", PORT)
+    return app
+
+
 if __name__ == '__main__':
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
+    # Render must see an open port even if Telegram asks the bot to wait
+    # because of a FloodWait during client startup.
+    loop.run_until_complete(start_web_server())
+
     while True:
         try:
             loop.run_until_complete(roaroicbot_start())
