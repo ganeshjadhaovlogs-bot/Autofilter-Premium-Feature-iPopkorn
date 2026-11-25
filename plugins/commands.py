@@ -309,7 +309,7 @@ async def start(client, message):
     file_details_task = asyncio.create_task(get_file_details(file_id))
     is_premium = await db.has_premium_access(message.from_user.id)
 
-    if not is_premium:
+    if not is_premium or AUTH_CHANNELS or AUTH_REQ_CHANNELS:
         try:
             btn = []
             chat = int(data.split("_", 2)[1])
