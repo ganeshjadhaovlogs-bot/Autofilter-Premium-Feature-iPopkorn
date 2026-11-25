@@ -112,11 +112,11 @@ async def _required_channel_button(bot, user_id, channel_id):
         )
     except Exception as e:
         logger.warning(f"Could not create join-request invite for {channel_id}: {e}")
-        # Fail closed: never deliver a file when channel access could not be verified.
-        return InlineKeyboardButton(
-            "⚠️ Channel check unavailable — try again",
-            callback_data="fsub_retry"
-        )
+        # Fail closed without adding a misleading "Channel check unavailable" button.
+        # The caller will show a plain retry message and will not send the file.
+        raise RuntimeError(
+            f"Required channel verification/invite creation failed for {channel_id}"
+        ) from e
 
 
 async def is_req_subscribed(bot, user_id, rqfsub_channels):
