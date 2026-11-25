@@ -28,9 +28,8 @@ def list_to_str(lst):
 Image.MAX_IMAGE_PIXELS = None
 warnings.simplefilter("ignore", Image.DecompressionBombWarning)
 async def fetch_image(url, size=(860, 1200)):
-    if not ROAROIC_IMAGE_FETCH:
-        logger.warning("Movie poster fetching is disabled by ROAROIC_IMAGE_FETCH.")
-        return None
+    # Channel announcements require artwork; do not let a stale env toggle
+    # silently disable IMDb/TMDB poster downloads.
     if not url:
         return None
 
