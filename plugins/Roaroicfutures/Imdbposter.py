@@ -3,6 +3,7 @@
 # https://t.me/roaroic0
 # ─────────────────────────────────────────────
 import re
+import json
 import difflib
 import aiohttp
 import warnings
@@ -270,6 +271,147 @@ async def _get_imdb_suggestion_poster(query, year=None):
         logger.warning("IMDb suggestion poster lookup failed for %r: %s", query, e)
         return None
 
+async def _get_imdb_online_metadata(query, year=None, imdb_id=None):
+    """Read core metadata from IMDb's title JSON-LD when IMDb permits the request."""
+    try:
+        raw_query = str(query or "").strip()
+        title = re.sub(r"\s*\(?((?:19|20)\d{2})\)?\s*$", "", raw_query).strip()
+        year_match = re.search(r"\b((?:19|20)\d{2})\b", raw_query)
+        year = str(year or (year_match.group(1) if year_match else "")) or None
+
+        def norm(value):
+            return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+        if not imdb_id:
+            suggestion_url = f"https://v3.sg.media-imdb.com/suggestion/titles/x/{quote(title.lower(), safe='')}.json"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+                "Accept": "application/json,text/plain,*/*",
+                "Referer": "https://www.imdb.com/"
+            }
+            async with aiohttp.ClientSession(headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as session:
+                async with session.get(suggestion_url) as response:
+                    if response.status != 200:
+                        return None
+                    payload = await response.json(content_type=None)
+                items = [
+                    item for item in payload.get("d", [])
+                    if str(item.get("id", "")).startswith("tt")
+                    and item.get("qid") in (None, "movie", "tvSeries", "tvMiniSeries", "tvMovie", "tvEpisode")
+                ]
+                exact = [item for item in items if norm(item.get("l")) == norm(title)]
+                if year:
+                    exact_year = [item for item in exact if str(item.get("y", "")) == year]
+                    if exact_year:
+                        exact = exact_year
+                    elif exact:
+                        return None
+                if exact:
+                    chosen = exact[0]
+                else:
+                    ranked = sorted(
+                        ((difflib.SequenceMatcher(None, norm(title), norm(item.get("l"))).ratio(), item)
+                         for item in items),
+                        key=lambda pair: pair[0], reverse=True
+                    )
+                    if not ranked or ranked[0][0] < 0.90:
+                        return None
+                    chosen = ranked[0][1]
+                    if year and str(chosen.get("y", "")) != year:
+                        return None
+                imdb_id = chosen.get("id")
+        else:
+            imdb_id = str(imdb_id)
+            if not imdb_id.startswith("tt"):
+                imdb_id = f"tt{imdb_id}"
+
+        if not imdb_id:
+            return None
+
+        page_url = f"https://www.imdb.com/title/{imdb_id}/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,*/*",
+            "Referer": "https://www.imdb.com/"
+        }
+        async with aiohttp.ClientSession(headers=headers, timeout=aiohttp.ClientTimeout(total=18)) as session:
+            async with session.get(page_url, allow_redirects=True) as response:
+                if response.status != 200:
+                    logger.warning("IMDb title metadata HTTP %s for %s", response.status, imdb_id)
+                    return None
+                html = await response.text(errors="ignore")
+
+        scripts = re.findall(
+            r'<script[^>]+type=["\\']application/ld\\+json["\\'][^>]*>(.*?)</script>',
+            html, flags=re.I | re.S
+        )
+        objects = []
+        for raw in scripts:
+            try:
+                parsed = json.loads(raw.strip())
+                objects.extend(parsed if isinstance(parsed, list) else [parsed])
+            except (ValueError, TypeError):
+                continue
+
+        def find_title_object(value):
+            if isinstance(value, dict):
+                kind = value.get("@type")
+                kinds = kind if isinstance(kind, list) else [kind]
+                if any(k in ("Movie", "TVSeries", "TVEpisode", "TVMiniSeries") for k in kinds):
+                    return value
+                for child in value.values():
+                    found = find_title_object(child)
+                    if found:
+                        return found
+            elif isinstance(value, list):
+                for child in value:
+                    found = find_title_object(child)
+                    if found:
+                        return found
+            return None
+
+        data = next((find_title_object(item) for item in objects if find_title_object(item)), None)
+        if not data:
+            logger.warning("IMDb title JSON-LD metadata unavailable for %s", imdb_id)
+            return None
+
+        duration = data.get("duration") or ""
+        duration_match = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?", duration)
+        runtime = None
+        if duration_match:
+            hours = int(duration_match.group(1) or 0)
+            minutes = int(duration_match.group(2) or 0)
+            runtime = f"{hours}h {minutes}m" if hours and minutes else (
+                f"{hours}h" if hours else f"{minutes}m" if minutes else None
+            )
+
+        aggregate = data.get("aggregateRating") or {}
+        rating = aggregate.get("ratingValue") if isinstance(aggregate, dict) else None
+        genres = data.get("genre") or []
+        if isinstance(genres, str):
+            genres = [genres]
+        languages = data.get("inLanguage") or []
+        if isinstance(languages, str):
+            languages = [languages]
+
+        result = {
+            "imdb_id": imdb_id,
+            "url": page_url,
+            "title": data.get("name"),
+            "genres": ", ".join(str(item) for item in genres if item) or None,
+            "rating": str(round(float(rating), 1)) if rating else None,
+            "runtime": runtime,
+            "languages": ", ".join(str(item) for item in languages if item) or None,
+            "poster_url": data.get("image")
+        }
+        logger.info("IMDb online metadata parsed for %s: genres=%s rating=%s runtime=%s",
+                    imdb_id, bool(result["genres"]), result["rating"], result["runtime"])
+        return {key: value for key, value in result.items() if value not in (None, "", [])}
+    except Exception as error:
+        logger.warning("IMDb online metadata lookup failed for %r: %s", query, error)
+        return None
+
+
 async def get_movie_details(query, id=False, file=None):
     """IMDb metadata lookup; always try IMDb's own suggestion service for artwork."""
     import asyncio
@@ -278,22 +420,27 @@ async def get_movie_details(query, id=False, file=None):
     lookup_title = (details or {}).get("title") or query
     lookup_year = (details or {}).get("year")
 
-    # This lookup is independent: it still runs when Cinemagoer cannot find a title.
+    # IMDb's current title page JSON-LD supplies live genres, rating and runtime.
+    online_details = await _get_imdb_online_metadata(
+        lookup_title, lookup_year, (details or {}).get("imdb_id")
+    )
     suggestion_poster = await _get_imdb_suggestion_poster(lookup_title, lookup_year)
+
     if not details:
-        if suggestion_poster:
-            logger.info("IMDb suggestion poster found for %r", query)
-            return {"title": str(query), "poster_url": suggestion_poster}
-        logger.warning("IMDb metadata and suggestion poster both unavailable for %r", query)
+        details = {"title": str(query)} if (online_details or suggestion_poster) else None
+    if not details:
+        logger.warning("IMDb metadata and poster unavailable for %r", query)
         return None
 
-    if suggestion_poster:
+    if online_details:
+        for key, value in online_details.items():
+            if value not in (None, "", [], "N/A"):
+                details[key] = value
+
+    if suggestion_poster and not details.get("poster_url"):
         details["poster_url"] = suggestion_poster
+    if suggestion_poster:
         logger.info("IMDb suggestion poster found for %r", query)
-    elif details.get("poster_url"):
-        logger.info("IMDb Cinemagoer poster found for %r", query)
-    else:
-        logger.warning("IMDb returned metadata but no poster for %r", query)
     return details
 
 
