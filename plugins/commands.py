@@ -309,48 +309,42 @@ async def start(client, message):
     file_details_task = asyncio.create_task(get_file_details(file_id))
     is_premium = await db.has_premium_access(message.from_user.id)
 
-    # Re-check every required channel on EVERY file request, including Premium users.
-    # Never continue to file delivery if the membership check itself fails.
-    try:
-        btn = []
-        chat = int(data.split("_", 2)[1])
-        settings = await get_settings(chat)
-        fsub_channels = list(dict.fromkeys(
-            (settings.get('fsub', []) if settings else []) + AUTH_CHANNELS
-        ))
+    if not is_premium:
+        try:
+            btn = []
+            chat = int(data.split("_", 2)[1])
+            settings      = await get_settings(chat)
+            fsub_channels = list(dict.fromkeys((settings.get('fsub', []) if settings else [])+ AUTH_CHANNELS)) 
 
-        if fsub_channels:
-            btn += await is_subscribed(client, message.from_user.id, fsub_channels)
-        if AUTH_REQ_CHANNELS:
-            btn += await is_req_subscribed(client, message.from_user.id, AUTH_REQ_CHANNELS)
+            if fsub_channels:
+                btn += await is_subscribed(client, message.from_user.id, fsub_channels)
+            if AUTH_REQ_CHANNELS:
+                btn += await is_req_subscribed(client, message.from_user.id, AUTH_REQ_CHANNELS)
+            if btn:
+                reply_markup = InlineKeyboardMarkup(btn)
+                if len(message.command) > 1 and "_" in message.command[1]:
+                    kk, file_id = message.command[1].split("_", 1)
+                    btn.append([
+                        InlineKeyboardButton("♻️ ᴛʀʏ ᴀɢᴀɪɴ ♻️", callback_data=f"checksub#{kk}#{file_id}")
+                    ])
+                    reply_markup = InlineKeyboardMarkup(btn)
+                photo = random.choice(FSUB_PICS) if FSUB_PICS else "https://graph.org/file/7478ff3eac37f4329c3d8.jpg"
+                caption = (
+                    f"👋 ʜᴇʟʟᴏ {message.from_user.mention}\n\n"
+                    "🛑 ʏᴏᴜ ᴍᴜsᴛ ᴊᴏɪɴ ᴛʜᴇ ʀᴇǫᴜɪʀᴇᴅ ᴄʜᴀɴɴᴇʟs ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ.\n"
+                    "👉 ᴊᴏɪɴ ᴀʟʟ ᴛʜᴇ ʙᴇʟᴏᴡ ᴄʜᴀɴɴᴇʟs ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ."
+                )
+                await message.reply_photo(
+                    photo=photo,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                    parse_mode=enums.ParseMode.HTML
+                )
+                return
 
-        if btn:
-            # Remove only the regular bot user-list entry. Premium records stay intact.
-            await db.delete_user(message.from_user.id)
-            if len(message.command) > 1 and "_" in message.command[1]:
-                kk, file_id = message.command[1].split("_", 1)
-                btn.append([
-                    InlineKeyboardButton("♻️ ᴛʀʏ ᴀɢᴀɪɴ ♻️", callback_data=f"checksub#{kk}#{file_id}")
-                ])
-            reply_markup = InlineKeyboardMarkup(btn)
-            photo = random.choice(FSUB_PICS) if FSUB_PICS else "https://graph.org/file/7478ff3eac37f4329c3d8.jpg"
-            caption = (
-                f"👋 ʜᴇʟʟᴏ {message.from_user.mention}\n\n"
-                "🛑 ʏᴏᴜ ᴍᴜsᴛ ᴊᴏɪɴ ᴛʜᴇ ʀᴇǫᴜɪʀᴇᴅ ᴄʜᴀɴɴᴇʟs ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ.\n"
-                "👉 ᴊᴏɪɴ ᴀʟʟ ᴛʜᴇ ʙᴇʟᴏᴡ ᴄʜᴀɴɴᴇʟs ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ."
-            )
-            await message.reply_photo(
-                photo=photo,
-                caption=caption,
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML
-            )
-            return
-
-    except Exception as e:
-        await log_error(client, f"❗️ Force Sub Error:\n\n{repr(e)}")
-        logger.error(f"❗️ Force Sub Error:\n\n{repr(e)}")
-        return
+        except Exception as e:
+            await log_error(client, f"❗️ Force Sub Error:\n\n{repr(e)}")
+            logger.error(f"❗️ Force Sub Error:\n\n{repr(e)}")
 
 
     user_id = m.from_user.id
