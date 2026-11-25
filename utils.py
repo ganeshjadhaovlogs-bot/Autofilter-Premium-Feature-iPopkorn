@@ -97,17 +97,28 @@ async def is_subscribed(bot, user_id, fsub_channels):
         except Exception as e:
             logger.warning(f"Pending join-request lookup failed for {channel_id}: {e}")
         try:
-            # A current channel member also passes verification.
-            await bot.get_chat_member(channel_id, user_id)
+            # Only an actual current member is accepted; LEFT/BANNED must rejoin.
+            member = await bot.get_chat_member(channel_id, user_id)
+            is_member = member.status in (
+                enums.ChatMemberStatus.MEMBER,
+                enums.ChatMemberStatus.ADMINISTRATOR,
+                enums.ChatMemberStatus.OWNER,
+            )
+            if member.status == enums.ChatMemberStatus.RESTRICTED:
+                is_member = bool(getattr(member, "is_member", False))
+            if is_member:
+                return None
         except UserNotParticipant:
-            try:
-                chat = await bot.get_chat(int(channel_id))
-                invite_link = await bot.create_chat_invite_link(channel_id)
-                return InlineKeyboardButton(f"📢 Join {chat.title}", url=FORCE_JOIN_LINK)
-            except Exception as e:
-                logger.warning(f"Failed to create invite for {channel_id}: {e}")
+            pass
         except Exception as e:
             logger.exception(f"is_subscribed error for {channel_id}: {e}")
+            return None
+
+        try:
+            chat = await bot.get_chat(int(channel_id))
+            return InlineKeyboardButton(f"📢 Join {chat.title}", url=FORCE_JOIN_LINK)
+        except Exception as e:
+            logger.warning(f"Failed to create Force Join button for {channel_id}: {e}")
         return None
 
     tasks = [check_channel(channel_id) for channel_id in fsub_channels]
