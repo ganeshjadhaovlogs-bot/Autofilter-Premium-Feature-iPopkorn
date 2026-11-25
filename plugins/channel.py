@@ -305,21 +305,21 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             if value not in (None, "", [], "N/A"):
                 details[key] = value
 
-        # Prefer TMDB's actual poster artwork for channel announcements.
-        # A backdrop is only a secondary TMDB option; IMDb is the final fallback.
+        # Channel announcement must use the full-width TMDB landscape backdrop first.
+        # Only fall back to portrait poster/IMDb artwork when TMDB has no backdrop.
+        tmdb_backdrop = tmdb_details.get("backdrop_url")
         tmdb_poster = tmdb_details.get("poster_url")
-        tmdb_backdrop = tmdb_details.get("backdrop_url") if LANDSCAPE_POSTER else None
         imdb_poster = imdb_details.get("poster_url")
-        poster_url = tmdb_poster or tmdb_backdrop or imdb_poster
+        poster_url = tmdb_backdrop or tmdb_poster or imdb_poster
         backup_poster_url = next(
-            (url for url in (tmdb_backdrop, imdb_poster) if url and url != poster_url),
+            (url for url in (tmdb_poster, imdb_poster) if url and url != poster_url),
             None
         )
         logger.info(
             "Announcement poster source for '%s': %s",
             base_name,
-            "TMDB poster" if tmdb_poster and poster_url == tmdb_poster
-            else "TMDB backdrop" if tmdb_backdrop and poster_url == tmdb_backdrop
+            "TMDB backdrop" if tmdb_backdrop and poster_url == tmdb_backdrop
+            else "TMDB poster" if tmdb_poster and poster_url == tmdb_poster
             else "IMDb" if imdb_poster and poster_url == imdb_poster
             else "no provider artwork"
         )
@@ -404,18 +404,18 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 )
                 tmdb_details = {}
 
-            # TMDB poster_path is the primary announcement artwork.
-            # Use TMDB backdrop only if poster_path is unavailable, then IMDb.
+            # Prefer the full-width TMDB landscape backdrop for announcement images.
+            # Use portrait TMDB poster and then IMDb only if no backdrop exists.
+            tmdb_backdrop = tmdb_details.get("backdrop_url")
             tmdb_poster = tmdb_details.get("poster_url")
-            tmdb_backdrop = tmdb_details.get("backdrop_url") if LANDSCAPE_POSTER else None
             imdb_poster = imdb_details.get("poster_url")
-            fresh_poster = tmdb_poster or tmdb_backdrop or imdb_poster
+            fresh_poster = tmdb_backdrop or tmdb_poster or imdb_poster
             poster_url = fresh_poster or movie_doc.get("poster_url") or movie_doc.get("backup_poster_url")
             logger.info(
                 "Repair poster source for '%s': %s",
                 base_name,
-                "TMDB poster" if tmdb_poster and fresh_poster == tmdb_poster
-                else "TMDB backdrop" if tmdb_backdrop and fresh_poster == tmdb_backdrop
+                "TMDB backdrop" if tmdb_backdrop and fresh_poster == tmdb_backdrop
+                else "TMDB poster" if tmdb_poster and fresh_poster == tmdb_poster
                 else "IMDb" if imdb_poster and fresh_poster == imdb_poster
                 else "saved artwork/fallback"
             )
@@ -945,17 +945,17 @@ async def refresh_all_movie_metadata(bot, message):
                     if value not in (None, "", [], "N/A"):
                         details[key] = value
 
-                # Always select TMDB's actual poster when it exists.
-                # Backdrop is secondary; IMDb is used only when TMDB has no artwork.
+                # Always select the TMDB landscape backdrop first for channel thumbnails.
+                # Portrait TMDB poster/IMDb artwork are fallbacks only.
+                tmdb_backdrop = tmdb_details.get("backdrop_url")
                 tmdb_poster = tmdb_details.get("poster_url")
-                tmdb_backdrop = tmdb_details.get("backdrop_url") if LANDSCAPE_POSTER else None
                 imdb_poster = imdb_details.get("poster_url")
-                poster_url = tmdb_poster or tmdb_backdrop or imdb_poster
+                poster_url = tmdb_backdrop or tmdb_poster or imdb_poster
                 logger.info(
                     "Refresh poster source for '%s': %s",
                     base_name,
-                    "TMDB poster" if tmdb_poster and poster_url == tmdb_poster
-                    else "TMDB backdrop" if tmdb_backdrop and poster_url == tmdb_backdrop
+                    "TMDB backdrop" if tmdb_backdrop and poster_url == tmdb_backdrop
+                    else "TMDB poster" if tmdb_poster and poster_url == tmdb_poster
                     else "IMDb" if imdb_poster and poster_url == imdb_poster
                     else "no provider artwork"
                 )
