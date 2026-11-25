@@ -7,6 +7,8 @@ import logging
 import asyncio
 from datetime import datetime
 from collections import defaultdict
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
 from plugins.Roaroicfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
@@ -281,7 +283,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "poster_url": (details.get("backdrop_url") or details.get("poster_url")) if LANDSCAPE_POSTER and TMDB_POSTER and not error_tmdb else details.get("poster_url"),
             "is_landscape": bool(LANDSCAPE_POSTER and TMDB_POSTER and not error_tmdb and details.get("backdrop_url")),
             "genres": genres,
-            "rating": details.get("rating", "N/A"),
+            "rating": details.get("rating") or "N/A",
+            "runtime": details.get("runtime") or "N/A",
             "imdb_url": (details.get("tmdb_url") if TMDB_POSTER and not error_tmdb else details.get("url")) or "",
             "year": media_info["year"] or details.get("year"),
             "tag": media_info["tag"],
@@ -332,31 +335,24 @@ async def send_movie_update(bot, base_name):
             ]])
 
             resized_poster = None
-            if movie_doc.get("poster_url") and not LINK_PREVIEW:
+            if movie_doc.get("poster_url"):
                 resized_poster = await fetch_image(
                     movie_doc["poster_url"],
-                    size=(1920, 1080) if movie_doc.get("is_landscape") else (853, 1280)
+                    size=(853, 1280)
                 )
-            if resized_poster:
-                msg = await bot.send_photo(
-                    chat_id=MOVIE_UPDATE_CHANNEL,
-                    photo=resized_poster,
-                    caption=text,
-                    reply_markup=buttons,
-                    parse_mode=enums.ParseMode.HTML
-                )
-                is_photo = True
-            else:
-                send_params = {
-                    "chat_id": MOVIE_UPDATE_CHANNEL,
-                    "text": text,
-                    "reply_markup": buttons,
-                    "parse_mode": enums.ParseMode.HTML
-                }
-                if movie_doc.get("poster_url") and LINK_PREVIEW:
-                    send_params["invert_media"] = ABOVE_PREVIEW
-                msg = await bot.send_message(**send_params)
-                is_photo = False
+            # Every update post must contain an image. If TMDB/IMDb has no usable
+            # poster (or image fetching fails), create a branded poster locally.
+            if not resized_poster:
+                resized_poster = generate_fallback_poster(movie_doc, base_name)
+
+            msg = await bot.send_photo(
+                chat_id=MOVIE_UPDATE_CHANNEL,
+                photo=resized_poster,
+                caption=text,
+                reply_markup=buttons,
+                parse_mode=enums.ParseMode.HTML
+            )
+            is_photo = True
 
             await db.movie_updates.update_one(
                 {"_id": base_name},
@@ -401,16 +397,17 @@ async def update_movie_message(bot, base_name):
                     reply_markup=buttons,
                     parse_mode=enums.ParseMode.HTML
                 )
-            else:
-                await bot.edit_message_text(
-                    chat_id=MOVIE_UPDATE_CHANNEL,
-                    message_id=message_id,
-                    text=text,
-                    reply_markup=buttons,
-                    parse_mode=enums.ParseMode.HTML,
-                    invert_media=ABOVE_PREVIEW,
-                    disable_web_page_preview=not LINK_PREVIEW
-                )
+                return
+            # Upgrade an older text-only notification to a photo post.
+            await bot.delete_messages(
+                chat_id=MOVIE_UPDATE_CHANNEL,
+                message_ids=message_id
+            )
+            await db.movie_updates.update_one(
+                {"_id": base_name},
+                {"$set": {"message_id": None, "is_photo": False}}
+            )
+            await send_movie_update(bot, base_name)
             return
         except (MessageIdInvalid, MessageNotModified):
             pass
@@ -429,6 +426,74 @@ async def update_movie_message(bot, base_name):
             await send_movie_update(bot, base_name)
     except Exception as e:
         logger.error(f"Failed to update movie message: {e}")
+
+def generate_fallback_poster(movie_doc, base_name):
+    """Create a branded poster when TMDB/IMDb has no usable artwork."""
+    width, height = 853, 1280
+    image = Image.new("RGB", (width, height))
+    draw = ImageDraw.Draw(image)
+
+    # Deep blue/purple vertical gradient with subtle geometric decoration.
+    top = (12, 18, 38)
+    bottom = (48, 20, 68)
+    for y in range(height):
+        ratio = y / max(height - 1, 1)
+        color = tuple(int(top[k] * (1 - ratio) + bottom[k] * ratio) for k in range(3))
+        draw.line((0, y, width, y), fill=color)
+    draw.ellipse((width - 310, 90, width + 160, 560), outline=(91, 75, 130), width=5)
+    draw.ellipse((-190, 760, 300, 1250), outline=(75, 61, 112), width=5)
+    draw.rounded_rectangle((42, 42, width - 42, height - 42), radius=28,
+                           outline=(145, 125, 185), width=3)
+
+    try:
+        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        small_font = ImageFont.truetype(font_path, 30)
+        title_font = ImageFont.truetype(font_path, 66)
+        footer_font = ImageFont.truetype(font_path, 28)
+    except Exception:
+        small_font = title_font = footer_font = ImageFont.load_default()
+
+    is_series = any(f.get("tag") == "#SERIES" for f in movie_doc.get("files", []))
+    label = "NEW SERIES" if is_series else "NEW MOVIE"
+    draw.text((width // 2, 270), label, font=small_font, fill=(230, 205, 255), anchor="mm")
+
+    title = str(base_name or "Untitled").strip()
+    words = title.split()
+    lines, line = [], ""
+    for word in words:
+        candidate = (line + " " + word).strip()
+        if draw.textbbox((0, 0), candidate, font=title_font)[2] <= width - 130:
+            line = candidate
+        else:
+            if line:
+                lines.append(line)
+            line = word
+    if line:
+        lines.append(line)
+    if not lines:
+        lines = ["Untitled"]
+    # Keep long titles readable and inside the poster.
+    if len(lines) > 5:
+        lines = lines[:5]
+        lines[-1] = lines[-1][:24] + "…"
+
+    line_height = 88
+    y = height // 2 - (len(lines) * line_height) // 2
+    for title_line in lines:
+        draw.text((width // 2, y), title_line, font=title_font,
+                  fill=(255, 255, 255), anchor="mm", stroke_width=1,
+                  stroke_fill=(30, 20, 45))
+        y += line_height
+
+    draw.line((180, 940, width - 180, 940), fill=(170, 145, 205), width=3)
+    draw.text((width // 2, 1000), "FILMS CHOR", font=footer_font,
+              fill=(230, 205, 255), anchor="mm")
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=92)
+    output.seek(0)
+    output.name = "movie_poster.jpg"
+    return output
+
 
 def generate_movie_message(movie_doc, base_name):
     all_qualities = set()
@@ -491,6 +556,11 @@ def generate_movie_message(movie_doc, base_name):
             epi_block = f"📺 ᴇᴘɪsᴏᴅᴇs : <b>\n{epi_str}</b>"
 
     genres = movie_doc.get("genres", "N/A")
+    runtime = str(movie_doc.get("runtime") or "N/A")
+    if runtime != "N/A":
+        runtime = runtime.replace(" minutes", "m").replace(" minute", "m").replace(" min", "m")
+        if runtime.isdigit():
+            runtime += "m"
     quality_str = ", ".join(sorted(all_qualities)) if all_qualities else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
@@ -501,6 +571,7 @@ def generate_movie_message(movie_doc, base_name):
         filename=base_name,
         tag=primary_tag,
         genres=genres,
+        runtime=runtime,
         ott=ott_str,
         quality=quality_str,
         language=language_str,
