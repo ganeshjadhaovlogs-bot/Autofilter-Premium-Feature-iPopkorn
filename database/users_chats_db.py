@@ -52,8 +52,17 @@ class Database:
         doc = await self.req.find_one({'user_id': user_id})
         return doc and 'channels' in doc and channel_id in doc['channels']
 
-    async def del_join_req(self):
-        await self.req.drop()
+    async def del_join_req(self, user_id=None, channel_id=None):
+        # With IDs, remove only this user's stale request for the channel.
+        # Without IDs, preserve the admin /delreq command's clear-all behavior.
+        if user_id is None or channel_id is None:
+            await self.req.drop()
+            return
+        await self.req.update_one(
+            {'user_id': user_id},
+            {'$pull': {'channels': channel_id}}
+        )
+        await self.req.delete_one({'user_id': user_id, 'channels': {'$size': 0}})
 
     def new_user(self, id, name):
         return dict(
