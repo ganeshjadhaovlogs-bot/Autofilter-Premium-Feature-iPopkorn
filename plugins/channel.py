@@ -732,11 +732,31 @@ def generate_movie_message(movie_doc, base_name):
             epi_block = f"📺 ᴇᴘɪsᴏᴅᴇs : <b>{epi_str}</b>"
 
     genres = movie_doc.get("genres", "N/A")
+    if isinstance(genres, (list, tuple, set)):
+        genres = ", ".join(str(item) for item in genres if item) or "N/A"
     runtime = str(movie_doc.get("runtime") or "N/A")
     if runtime != "N/A":
-        runtime = runtime.replace(" minutes", "m").replace(" minute", "m").replace(" min", "m")
-        if runtime.isdigit():
-            runtime += "m"
+        minute_match = re.fullmatch(r"\s*(\d+)\s*(?:minutes?|mins?|m)\s*", runtime, re.I)
+        if minute_match:
+            total_minutes = int(minute_match.group(1))
+            hours, minutes = divmod(total_minutes, 60)
+            runtime = f"{hours}h {minutes}m" if hours and minutes else (
+                f"{hours}h" if hours else f"{minutes}m"
+            )
+        else:
+            runtime = runtime.replace(" minutes", "m").replace(" minute", "m").replace(" min", "m")
+            if runtime.isdigit():
+                total_minutes = int(runtime)
+                hours, minutes = divmod(total_minutes, 60)
+                runtime = f"{hours}h {minutes}m" if hours and minutes else (
+                    f"{hours}h" if hours else f"{minutes}m"
+                )
+    rating = str(movie_doc.get("rating") or "N/A")
+    if rating != "N/A" and not rating.endswith("/10"):
+        try:
+            rating = f"{float(rating):.1f}/10"
+        except (TypeError, ValueError):
+            pass
     quality_str = ", ".join(sorted(all_qualities)) if all_qualities else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else (
@@ -763,7 +783,7 @@ def generate_movie_message(movie_doc, base_name):
         quality=quality_str,
         language=language_str,
         episodes=epi_block,
-        rating=movie_doc.get("rating", "N/A"),
+        rating=rating,
         search_link=temp.B_LINK
     )
 
@@ -838,9 +858,9 @@ async def refresh_all_movie_metadata(bot, message):
                     online_languages = ", ".join(str(item) for item in online_languages if item)
                 updates = {
                     "title": details.get("title") or base_name,
-                    "genres": genres or "N/A",
-                    "rating": details.get("rating") or "N/A",
-                    "runtime": details.get("runtime") or "N/A",
+                    "genres": genres if genres != "N/A" else (movie_doc.get("genres") or "N/A"),
+                    "rating": details.get("rating") or movie_doc.get("rating") or "N/A",
+                    "runtime": details.get("runtime") or movie_doc.get("runtime") or "N/A",
                     "year": details.get("year") or movie_doc.get("year"),
                     "ott_platform": tmdb_details.get("ott_platform") or movie_doc.get("ott_platform") or "N/A",
                     "online_languages": online_languages or movie_doc.get("online_languages") or "N/A",
