@@ -1516,7 +1516,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data == "start":
         buttons = [[
-                    InlineKeyboardButton(' ⌣🍒ᴄʜᴀɴɴᴇʟs ', callback_data='channel'),
+                    InlineKeyboardButton(' 🧿ᴄʜᴀɴɴᴇʟs ', callback_data='channel'),
                     InlineKeyboardButton(' 🔍ɢʀᴏᴜᴘ ', callback_data='ɢʀᴏᴜᴘ'),
                 ],[
                     InlineKeyboardButton(' ʜᴇʟᴘ 😎', callback_data='help'),
@@ -1659,8 +1659,8 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data == "ɢʀᴏᴜᴘ":
         buttons = [[
-            InlineKeyboardButton('SEARCH GROUP 🏢', url='https://t.me/roaroicgroup'),
-            InlineKeyboardButton('DISCUSSION GROUP 🏢', url='https://t.me/+HwZPzMx1njs2N2Y9') 
+            InlineKeyboardButton('SEARCH GROUP ', url='https://t.me/+LoJSMzUmcmQ2NWFl'),
+            InlineKeyboardButton('MOVIE GROUP ', url='https://t.me/+LoJSMzUmcmQ2NWFl') 
         ],[
             InlineKeyboardButton('⇋ ʙᴀᴄᴋ ᴛᴏ ʜᴏᴍᴇ ⇋', callback_data='start')
         ]]
@@ -1673,9 +1673,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
     
     elif query.data == "channel":
         buttons = [[
-            InlineKeyboardButton('UPDATE CHANNEL ִֶָ🔄', url='https://t.me/+yCN2FC62QmIyM2Fl'),
-            InlineKeyboardButton('MAIN CHANNEL ִֶָ🍿', url='https://t.me/+5QNRX0xVXeA2NmM1'),
-            InlineKeyboardButton('Movie Group 🚨', url='https://t.me/+gLBpbDa_b5JkMGQ1') 
+            InlineKeyboardButton('UPDATE CHANNEL ִֶָ🔄', url='https://t.me/+xvBGsY_bn2s3NjA9'),
+            InlineKeyboardButton('MAIN CHANNEL ִֶָ🍿', url='https://t.me/FilmsChor'),
+            InlineKeyboardButton('MOVIE GROUP 🎟️', url='https://t.me/+LoJSMzUmcmQ2NWFl') 
         ], [ InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data='about')
         ]]
         reply_markup = InlineKeyboardMarkup(buttons)
