@@ -586,15 +586,47 @@ async def update_movie_message(bot, base_name):
                         parse_mode=enums.ParseMode.HTML
                     )
             else:
-                # Preserve older text-only posts too; never delete them automatically.
-                await bot.edit_message_text(
+                # Telegram cannot turn a text message into a photo by editing it.
+                # Upgrade legacy text-only announcements by sending the photo first,
+                # then remove the old bot message only after the new post succeeds.
+                resized_poster = None
+                for poster_url in (
+                    movie_doc.get("poster_url"),
+                    movie_doc.get("backup_poster_url")
+                ):
+                    if not poster_url:
+                        continue
+                    resized_poster = await fetch_image(
+                        poster_url,
+                        size=(1280, 720)
+                    )
+                    if resized_poster:
+                        break
+
+                if not resized_poster:
+                    resized_poster = generate_fallback_poster(movie_doc, base_name)
+
+                new_msg = await bot.send_photo(
                     chat_id=MOVIE_UPDATE_CHANNEL,
-                    message_id=message_id,
-                    text=text,
+                    photo=resized_poster,
+                    caption=text,
                     reply_markup=buttons,
-                    parse_mode=enums.ParseMode.HTML,
-                    disable_web_page_preview=True
+                    parse_mode=enums.ParseMode.HTML
                 )
+                await db.movie_updates.update_one(
+                    {"_id": base_name},
+                    {"$set": {"message_id": new_msg.id, "is_photo": True}}
+                )
+                try:
+                    await bot.delete_messages(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        message_ids=message_id
+                    )
+                except Exception:
+                    logger.warning(
+                        "New poster post created for %s, but old text post %s could not be removed.",
+                        base_name, message_id
+                    )
             return
         except MessageNotModified:
             return
