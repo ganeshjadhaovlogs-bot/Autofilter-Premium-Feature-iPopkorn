@@ -439,6 +439,60 @@ async def update_movie_message(bot, base_name):
     except Exception as e:
         logger.error(f"Failed to update movie message: {e}")
 
+
+async def sync_movie_updates_after_file_delete(bot, deleted_filenames):
+    """Remove deleted database files from movie announcements and clean empty posts."""
+    deleted_keys = {
+        re.sub(r"[^a-z0-9]+", " ", str(name).lower()).strip()
+        for name in deleted_filenames if name
+    }
+    if not deleted_keys:
+        return
+
+    async for movie_doc in db.movie_updates.find({}):
+        movie_files = movie_doc.get("files", [])
+        remaining_files = [
+            item for item in movie_files
+            if re.sub(
+                r"[^a-z0-9]+", " ",
+                str(item.get("filename", "")).lower()
+            ).strip() not in deleted_keys
+        ]
+        if len(remaining_files) == len(movie_files):
+            continue
+
+        base_name = movie_doc["_id"]
+        pending = pending_updates.pop(base_name, None)
+        if pending and not pending.cancelled():
+            pending.cancel()
+
+        if remaining_files:
+            await db.movie_updates.update_one(
+                {"_id": base_name},
+                {"$set": {"files": remaining_files}}
+            )
+            await update_movie_message(bot, base_name)
+            logger.info("Updated channel announcement after file deletion: %s", base_name)
+            continue
+
+        message_id = movie_doc.get("message_id")
+        if message_id:
+            try:
+                await bot.delete_messages(
+                    chat_id=MOVIE_UPDATE_CHANNEL,
+                    message_ids=message_id
+                )
+            except MessageIdInvalid:
+                pass
+            except Exception:
+                logger.exception(
+                    "Could not delete channel announcement for %s", base_name
+                )
+                continue
+
+        await db.movie_updates.delete_one({"_id": base_name})
+        logger.info("Deleted empty movie announcement: %s", base_name)
+
 def generate_fallback_poster(movie_doc, base_name):
     """Create a branded poster when TMDB/IMDb has no usable artwork."""
     width, height = 1280, 720
