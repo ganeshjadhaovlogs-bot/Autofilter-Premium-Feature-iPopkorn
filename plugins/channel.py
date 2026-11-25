@@ -264,9 +264,18 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     if not movie_doc:
         # IMDb is the primary source for title details and artwork.
         imdb_details = await get_movie_details(base_name) or {}
+        logger.info(
+            "IMDb lookup for '%s': %s",
+            base_name,
+            "matched " + str(imdb_details.get("imdb_id")) if imdb_details else "no match"
+        )
         # Query TMDB as a second source even when IMDb returns partial metadata.
-        # TMDB_POSTER controls poster presentation only; it must not disable details lookup.
         tmdb_details = await get_movie_detailsx(base_name) or {}
+        logger.info(
+            "TMDB lookup for '%s': %s",
+            base_name,
+            "matched " + str(tmdb_details.get("tmdb_id")) if tmdb_details.get("tmdb_id") else tmdb_details.get("error", "no match")
+        )
 
         # IMDb has priority; TMDB fills every field IMDb does not provide.
         details = dict(tmdb_details)
@@ -293,6 +302,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
         movie_doc = {
             "_id": base_name,
+            "title": details.get("title") or imdb_details.get("title") or base_name,
             "files": [file_data],
             "poster_url": poster_url,
             "backup_poster_url": backup_poster_url,
@@ -363,6 +373,9 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                     if imdb_details.get("poster_url") and tmdb_details.get("poster_url")
                     else movie_doc.get("backup_poster_url")
                 )
+            title_candidate = imdb_details.get("title") or tmdb_details.get("title")
+            if title_candidate and not movie_doc.get("title"):
+                updates["title"] = title_candidate
             for field in ("genres", "rating", "runtime", "year"):
                 current = movie_doc.get(field)
                 candidate = imdb_details.get(field) or tmdb_details.get(field)
@@ -725,10 +738,15 @@ def generate_movie_message(movie_doc, base_name):
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
 
+    display_title = movie_doc.get("title") or base_name
+    year = movie_doc.get("year")
+    if year and str(year) not in str(display_title):
+        display_title = f"{display_title} ({year})"
+
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
         imdb_url=movie_doc.get("imdb_url", ""),
-        filename=base_name,
+        filename=display_title,
         tag=primary_tag,
         genres=genres,
         runtime=runtime,
