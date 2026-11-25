@@ -110,6 +110,28 @@ def get_qualities(text: str) -> str:
     qualities = QUALITY_PATTERN.findall(text)
     return ", ".join(qualities) if qualities else "N/A"
 
+def format_runtime(value):
+    """Normalize IMDb/TMDB runtime values to a single readable duration."""
+    if value in (None, "", "N/A"):
+        return None
+    if isinstance(value, (list, tuple, set)):
+        value = next((item for item in value if item not in (None, "")), None)
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw or raw.upper() == "N/A":
+        return None
+    if re.fullmatch(r"(?i)\s*\d+\s*h(?:\s*\d+\s*m)?\s*", raw):
+        return re.sub(r"\s+", " ", raw).strip().lower()
+    match = re.search(r"\b(\d{1,3})\b", raw)
+    if not match:
+        return None
+    total_minutes = int(match.group(1))
+    if total_minutes <= 0:
+        return None
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours}h {minutes}m" if hours and minutes else (f"{hours}h" if hours else f"{minutes}m")
+
 def extract_ott_platform(text: str) -> str:
     text = text.lower()
     platforms = {plat for key, plat in OTT_PLATFORMS.items() if key in text}
@@ -309,7 +331,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "is_landscape": True,
             "genres": genres,
             "rating": details.get("rating") or "N/A",
-            "runtime": details.get("runtime") or "N/A",
+            "runtime": format_runtime(details.get("runtime")) or "N/A",
             "imdb_url": imdb_details.get("url") or (
                 f"https://www.imdb.com/title/{imdb_details.get('imdb_id')}"
                 if imdb_details.get("imdb_id") else
@@ -401,6 +423,10 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 if candidate and current in (None, "", "N/A"):
                     if field == "genres" and not isinstance(candidate, str):
                         candidate = ", ".join(str(item) for item in candidate)
+                    elif field == "runtime":
+                        candidate = format_runtime(candidate)
+                        if not candidate:
+                            continue
                     updates[field] = candidate
 
             online_languages = tmdb_details.get("languages") or []
@@ -881,7 +907,7 @@ async def refresh_all_movie_metadata(bot, message):
                     "title": details.get("title") or base_name,
                     "genres": genres if genres != "N/A" else (movie_doc.get("genres") or "N/A"),
                     "rating": details.get("rating") or movie_doc.get("rating") or "N/A",
-                    "runtime": details.get("runtime") or movie_doc.get("runtime") or "N/A",
+                    "runtime": format_runtime(details.get("runtime")) or format_runtime(movie_doc.get("runtime")) or "N/A",
                     "year": details.get("year") or movie_doc.get("year"),
                     "ott_platform": tmdb_details.get("ott_platform") or movie_doc.get("ott_platform") or "N/A",
                     "online_languages": online_languages or movie_doc.get("online_languages") or "N/A",
