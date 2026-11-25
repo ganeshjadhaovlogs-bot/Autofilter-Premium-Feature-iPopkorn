@@ -111,22 +111,40 @@ def get_qualities(text: str) -> str:
     return ", ".join(qualities) if qualities else "N/A"
 
 def format_runtime(value):
-    """Normalize IMDb/TMDB runtime values to a single readable duration."""
+    """Normalize IMDb/TMDB runtime values, including ISO-8601 and TV episode runtimes."""
     if value in (None, "", "N/A"):
         return None
     if isinstance(value, (list, tuple, set)):
-        value = next((item for item in value if item not in (None, "")), None)
-    if value is None:
+        for item in value:
+            formatted = format_runtime(item)
+            if formatted:
+                return formatted
         return None
-    raw = str(value).strip()
-    if not raw or raw.upper() == "N/A":
-        return None
-    if re.fullmatch(r"(?i)\s*\d+\s*h(?:\s*\d+\s*m)?\s*", raw):
-        return re.sub(r"\s+", " ", raw).strip().lower()
-    match = re.search(r"\b(\d{1,3})\b", raw)
-    if not match:
-        return None
-    total_minutes = int(match.group(1))
+    if isinstance(value, (int, float)):
+        total_minutes = int(value)
+    else:
+        raw = str(value).strip()
+        if not raw or raw.upper() == "N/A":
+            return None
+
+        # ISO-8601 duration, e.g. PT1H53M.
+        iso = re.fullmatch(r"(?i)PT(?:(\d+)H)?(?:(\d+)M)?", raw)
+        if iso:
+            total_minutes = int(iso.group(1) or 0) * 60 + int(iso.group(2) or 0)
+        else:
+            # Human-readable duration, e.g. "1 hour 53 minutes" or "1h 53m".
+            hours_match = re.search(r"(?i)(\d+)\s*(?:h|hours?)\b", raw)
+            minutes_match = re.search(r"(?i)(\d+)\s*(?:m|min|mins|minutes?)\b", raw)
+            if hours_match or minutes_match:
+                total_minutes = int(hours_match.group(1) if hours_match else 0) * 60
+                total_minutes += int(minutes_match.group(1) if minutes_match else 0)
+            else:
+                # IMDb can return multiple runtimes like "113, 110"; use first.
+                match = re.search(r"\b(\d{1,3})\b", raw)
+                if not match:
+                    return None
+                total_minutes = int(match.group(1))
+
     if total_minutes <= 0:
         return None
     hours, minutes = divmod(total_minutes, 60)
@@ -341,7 +359,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "is_landscape": True,
             "genres": genres,
             "rating": details.get("rating") or "N/A",
-            "runtime": format_runtime(details.get("runtime")) or "N/A",
+            "runtime": format_runtime(details.get("runtime") or imdb_details.get("runtime") or tmdb_details.get("runtime") or tmdb_details.get("episode_run_time")) or "N/A",
             "imdb_url": imdb_details.get("url") or (
                 f"https://www.imdb.com/title/{imdb_details.get('imdb_id')}"
                 if imdb_details.get("imdb_id") else
@@ -433,6 +451,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             for field in ("genres", "rating", "runtime", "year"):
                 current = movie_doc.get(field)
                 candidate = imdb_details.get(field) or tmdb_details.get(field)
+                if field == "runtime":
+                    candidate = candidate or imdb_details.get("runtimes") or tmdb_details.get("episode_run_time")
                 if candidate and current in (None, "", "N/A"):
                     if field == "genres" and not isinstance(candidate, str):
                         candidate = ", ".join(str(item) for item in candidate)
@@ -976,7 +996,7 @@ async def refresh_all_movie_metadata(bot, message):
                     # omits a field or returns an empty result.
                     "genres": genres if genres != "N/A" else (movie_doc.get("genres") or "N/A"),
                     "rating": details.get("rating") if details.get("rating") not in (None, "", "N/A") else (movie_doc.get("rating") or "N/A"),
-                    "runtime": format_runtime(details.get("runtime")) or format_runtime(movie_doc.get("runtime")) or "N/A",
+                    "runtime": format_runtime(details.get("runtime") or imdb_details.get("runtime") or tmdb_details.get("runtime") or tmdb_details.get("episode_run_time")) or format_runtime(movie_doc.get("runtime")) or "N/A",
                     "year": details.get("year") or movie_doc.get("year"),
                     "ott_platform": tmdb_details.get("ott_platform") or movie_doc.get("ott_platform") or "N/A",
                     "online_languages": online_languages or movie_doc.get("online_languages") or "N/A",
