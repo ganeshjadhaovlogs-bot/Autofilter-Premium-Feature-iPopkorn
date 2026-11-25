@@ -957,38 +957,64 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data.startswith("checksub"):
         try:
-            parts = query.data.split("#")
-            if len(parts) != 3:
+            # Split only on the first two separators; file_ids may contain underscores.
+            parts = query.data.split("#", 2)
+            if len(parts) != 3 or not parts[1] or not parts[2]:
                 await query.answer(
-                    "⚠️ This old button has expired. Please open the movie link again.",
+                    "⚠️ This button is invalid or expired. Please open the movie link again.",
                     show_alert=True
                 )
                 return
-            ident, kk, file_id = parts
+
+            _, chat_id, file_id = parts
+            try:
+                chat_id = int(chat_id)
+            except (TypeError, ValueError):
+                await query.answer(
+                    "⚠️ This button is invalid or expired. Please open the movie link again.",
+                    show_alert=True
+                )
+                return
+
             btn = []
-            chat = file_id.split("_")[0]
-            settings = await get_settings(chat)
-            fsub_channels = list(dict.fromkeys((settings.get('fsub', []) if settings else [])+ AUTH_CHANNELS)) 
+            settings = await get_settings(chat_id)
+            fsub_channels = list(dict.fromkeys(
+                (settings.get('fsub', []) if settings else []) + AUTH_CHANNELS
+            ))
             btn += await is_subscribed(client, query.from_user.id, fsub_channels)
             btn += await is_req_subscribed(client, query.from_user.id, AUTH_REQ_CHANNELS)
+
             if btn:
-                btn.append([InlineKeyboardButton("🔄 ᴛʀʏ ᴀɢᴀɪɴ", callback_data=f"checksub#{kk}#{file_id}")])
+                btn.append([InlineKeyboardButton(
+                    "🔄 ᴛʀʏ ᴀɢᴀɪɴ",
+                    callback_data=f"checksub#{chat_id}#{file_id}"
+                )])
                 try:
-                    await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
+                    await query.edit_message_reply_markup(
+                        reply_markup=InlineKeyboardMarkup(btn)
+                    )
                 except MessageNotModified:
                     pass
                 await query.answer(
-                    f"👋 Hello {query.from_user.first_name},\n\n"
-                    "🛑 Yᴏᴜ ʜᴀᴠᴇ ɴᴏᴛ ᴊᴏɪɴᴇᴅ ᴀʟʟ ʀᴇǫᴜɪʀᴇᴅ ᴜᴘᴅᴀᴛᴇ Cʜᴀɴɴᴇʟs.\n"
-                    "👉 Pʟᴇᴀsᴇ ᴊᴏɪɴ ᴇᴀᴄʜ ᴏɴᴇ ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.\n",
+                    f"👋 Hello {query.from_user.first_name},\\n\\n"
+                    "🛑 Yᴏᴜ ʜᴀᴠᴇ ɴᴏᴛ ᴊᴏɪɴᴇᴅ ᴀʟʟ ʀᴇǫᴜɪʀᴇᴅ ᴜᴘᴅᴀᴛᴇ Cʜᴀɴɴᴇʟs.\\n"
+                    "👉 Pʟᴇᴀsᴇ ᴊᴏɪɴ ᴇᴀᴄʜ ᴏɴᴇ ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.\\n",
                     show_alert=True
                 )
                 return
-            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={kk}_{file_id}")
+
+            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={chat_id}_{file_id}")
             await query.message.delete()
         except Exception as e:
-            await log_error(client, f"❌ Error in checksub callback:\n\n{repr(e)}")
-            logger.error(f"❌ Error in checksub callback:\n\n{repr(e)}")
+            logger.exception("Error in checksub callback")
+            try:
+                await query.answer(
+                    "⚠️ Verification failed. Please tap Try Again.",
+                    show_alert=True
+                )
+            except Exception:
+                pass
+            await log_error(client, f"❌ Error in checksub callback:\\n\\n{repr(e)}")
 
 
     elif query.data.startswith("killfilesdq"):
