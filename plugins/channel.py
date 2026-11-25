@@ -15,7 +15,7 @@ from pyrogram import Client, filters, enums
 from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS
 from Script import script
 from database.ia_filterdb import save_file
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from utils import temp
 from pymongo.errors import PyMongoError, DuplicateKeyError
 from pyrogram.errors import MessageIdInvalid, MessageNotModified, FloodWait
@@ -548,13 +548,43 @@ async def update_movie_message(bot, base_name):
 
         try:
             if is_photo:
-                await bot.edit_message_caption(
-                    chat_id=MOVIE_UPDATE_CHANNEL,
-                    message_id=message_id,
-                    caption=text,
-                    reply_markup=buttons,
-                    parse_mode=enums.ParseMode.HTML
-                )
+                # Refresh the actual poster media as well as its caption.
+                # Editing only the caption leaves an old/fallback thumbnail in place.
+                resized_poster = None
+                for poster_url in (
+                    movie_doc.get("poster_url"),
+                    movie_doc.get("backup_poster_url")
+                ):
+                    if not poster_url:
+                        continue
+                    resized_poster = await fetch_image(
+                        poster_url,
+                        size=(1280, 720)
+                    )
+                    if resized_poster:
+                        break
+
+                if resized_poster:
+                    media = InputMediaPhoto(
+                        media=resized_poster,
+                        caption=text,
+                        parse_mode=enums.ParseMode.HTML
+                    )
+                    await bot.edit_message_media(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        message_id=message_id,
+                        media=media,
+                        reply_markup=buttons
+                    )
+                else:
+                    # Keep the existing artwork if the refreshed URL is unavailable.
+                    await bot.edit_message_caption(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        message_id=message_id,
+                        caption=text,
+                        reply_markup=buttons,
+                        parse_mode=enums.ParseMode.HTML
+                    )
             else:
                 # Preserve older text-only posts too; never delete them automatically.
                 await bot.edit_message_text(
