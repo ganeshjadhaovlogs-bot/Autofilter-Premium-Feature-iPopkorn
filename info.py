@@ -36,9 +36,9 @@ INDEX_CAPTION = is_enabled(str(environ.get('SAVE_CAPTION', True)), True) # Save 
 #Making it false will not save caption in db SO you can save some storage space
 
 
-PICS = (environ.get('PICS', 'https://graph.org/file/56b5deb73f3b132e2bb73.jpg https://graph.org/file/5303692652d91d52180c2.jpg https://graph.org/file/425b6f46efc7c6d64105f.jpg https://graph.org/file/876867e761c6c7a29855b.jpg')).split()  # Sample pic
+PICS = (environ.get('PICS', 'https://i.ibb.co/KxVzBmBw/photo-2026-11-17-13-25-37-7709131031172874268.jpg https://graph.org/file/5303692652d91d52180c2.jpg https://graph.org/file/425b6f46efc7c6d64105f.jpg https://graph.org/file/876867e761c6c7a29855b.jpg')).split()  # Sample pic
 NOR_IMG = environ.get("NOR_IMG", "https://graph.org/file/e20b5fdaf217252964202.jpg")
-MELCOW_PHOTO = environ.get("MELCOW_PHOTO", "https://graph.org/file/56b5deb73f3b132e2bb73.jpg")
+MELCOW_PHOTO = environ.get("MELCOW_PHOTO", "https://i.ibb.co/KxVzBmBw/photo-2026-11-17-13-25-37-7709131031172874268.jpg")
 SPELL_IMG = environ.get("SPELL_IMG", "https://graph.org/file/13702ae26fb05df52667c.jpg")
 # Background photo used on every bot menu (Start / Help / About / Channels / Group ...).
 # Default is the bundled image; set BG_PIC env var to a URL or file path to change it.
@@ -92,25 +92,25 @@ DATABASE_URI2 = environ.get('DATABASE_URI2', "")  # MongoDB URI for the second d
 # Movie Notification & Update Settings
 # ============================
 MOVIE_UPDATE_NOTIFICATION = is_enabled(str(environ.get('MOVIE_UPDATE_NOTIFICATION', True)), True)  # Notification On (True) / Off (False)
-MOVIE_UPDATE_CHANNEL = int(environ.get('MOVIE_UPDATE_CHANNEL', '-1003900854538'))  # Notification of sent to your channel
+MOVIE_UPDATE_CHANNEL = int(environ.get('MOVIE_UPDATE_CHANNEL', '-1004406237317'))  # Notification of sent to your channel
 ROAROIC_IMAGE_FETCH = is_enabled(str(environ.get('ROAROIC_IMAGE_FETCH', True)), True)  # On (True) / Off (False)
 LINK_PREVIEW = is_enabled(str(environ.get('LINK_PREVIEW', True)), True) # Shows link preview in notification msg instead of image
 ABOVE_PREVIEW = is_enabled(str(environ.get('ABOVE_PREVIEW', True)), True) # Shows link preview above the text in notification msg if True else below the msg
 TMDB_API_KEY = environ.get('TMDB_API_KEY', '') # TMDB v3 API Key (or v4 Read Access Token) -> https://www.themoviedb.org/settings/api
-TMDB_POSTER = is_enabled(str(environ.get('TMDB_POSTER', False)), False) # Shows TMDB poster in notification msg
+TMDB_POSTER = is_enabled(str(environ.get('TMDB_POSTER', True)), True) # Shows TMDB poster in notification msg
 LANDSCAPE_POSTER = is_enabled(str(environ.get('LANDSCAPE_POSTER', True)), True) # Shows landscape poster in notification msg
 
 # ============================
 # Verification Settings
 # ============================
-IS_VERIFY = is_enabled(environ.get('IS_VERIFY', 'True'), True)  # Verification On (True) / Off (False)
+IS_VERIFY = is_enabled(environ.get('IS_VERIFY', 'False'), False)  # Verification On (True) / Off (False)
 LOG_VR_CHANNEL = int(environ.get('LOG_VR_CHANNEL', '-100')) #Verification Channel Id 
 LOG_API_CHANNEL = int(environ.get('LOG_API_CHANNEL', '-100')) #If Anyone Set Your Bot In Any Group And Set Shortner In That Group Then In This Channel The All Details Come
 VERIFY_IMG = environ.get("VERIFY_IMG", "https://telegra.ph/file/9ecc5d6e4df5b83424896.jpg")
 
-TUTORIAL = environ.get("TUTORIAL", "https://t.me/roaroicgroup")   # Tutorial link for verification
-TUTORIAL_2 = environ.get("TUTORIAL_2", "https://t.me/kingo_serial")   # Second tutorial link for verification
-TUTORIAL_3 = environ.get("TUTORIAL_3", "https://t.me/kingo_serial")   # Third tutorial link for verification
+TUTORIAL = environ.get("TUTORIAL", "")   # Tutorial link for verification
+TUTORIAL_2 = environ.get("TUTORIAL_2", "")   # Second tutorial link for verification
+TUTORIAL_3 = environ.get("TUTORIAL_3", "")   # Third tutorial link for verification
 
 # Verification (Must Fill All Veriables. Else You Got Error
 SHORTENER_API = environ.get("SHORTENER_API", "1e72bd1274625811043cb1d1ca2dbcbe77e9fdd2") # Shortener API key
@@ -131,9 +131,9 @@ THREE_VERIFY_GAP = int(environ.get('THREE_VERIFY_GAP', "54000"))
 # ============================
 # Channel & Group Links Configuration
 # ============================
-GRP_LNK = environ.get('GRP_LNK', 'https://t.me/roaroicgroup') # Group link for the bot
-OWNER_LNK = environ.get('OWNER_LNK', 'https://t.me/roaroic0') # Owner link for the bot
-UPDATE_CHNL_LNK = environ.get('UPDATE_CHNL_LNK', 'https://t.me/kingo_serial') # Update channel link for the bot
+GRP_LNK = environ.get('GRP_LNK', 'https://t.me/+xvBGsY_bn2s3NjA9') # Group link for the bot
+OWNER_LNK = environ.get('OWNER_LNK', 'https://t.me/ironMan6081') # Owner link for the bot
+UPDATE_CHNL_LNK = environ.get('UPDATE_CHNL_LNK', 'https://t.me/+xvBGsY_bn2s3NjA9') # Update channel link for the bot
 
 # ============================
 # User Configuration
@@ -161,7 +161,7 @@ NO_RESULTS_MSG = is_enabled(str(environ.get("NO_RESULTS_MSG", True)), True)  # T
 MAX_BTN = is_enabled((environ.get('MAX_BTN', "True")), True)    # Max Button On (True) / Off (False)
 P_TTI_SHOW_OFF = is_enabled((environ.get('P_TTI_SHOW_OFF', "False")), False)    # P_TTI_SHOW_OFF On (True) / Off (False)
 IMDB = is_enabled((environ.get('IMDB', "False")),False)    # IMDB Results On (True) / Off (False)
-TMDB_ON_SEARCH = is_enabled((environ.get('TMDB_ON_SEARCH', "False")), False)    # Use TMDB Poster On Search Results
+TMDB_ON_SEARCH = is_enabled((environ.get('TMDB_ON_SEARCH', "True")), True)    # Use TMDB Poster On Search Results
 AUTO_FFILTER = is_enabled((environ.get('AUTO_FFILTER', "True")), True) # Auto Filter On (True) / Off (False)
 AUTO_DELETE = is_enabled((environ.get('AUTO_DELETE', "True")), True) # Auto Delete On (True) / Off (False)
 LONG_IMDB_DESCRIPTION = is_enabled(environ.get("LONG_IMDB_DESCRIPTION", "False"), False) # Long IMDB Description On (True) / Off (False)
@@ -172,7 +172,7 @@ PM_SEARCH = is_enabled(str(environ.get('PM_SEARCH', True)), True)  # PM Search O
 EMOJI_MODE = is_enabled(str(environ.get('EMOJI_MODE', True)), True)  # Emoji status On (True) / Off (False)
 BUTTON_MODE = is_enabled((environ.get('BUTTON_MODE', "True")), True) # pm & Group button or link mode (True) / Off (False)
 STREAM_MODE = is_enabled(environ.get('STREAM_MODE', "True"), True) # Set Stream mode True or False
-PREMIUM_STREAM_MODE = is_enabled(environ.get('PREMIUM_STREAM_MODE', "True"), True) # Set Stream mode True or False only for premium users
+PREMIUM_STREAM_MODE = is_enabled(environ.get('PREMIUM_STREAM_MODE', "False"), False) # Set Stream mode True or False only for premium users
 
 
 # ============================
@@ -208,6 +208,7 @@ BAD_WORDS = {
     "villa",
     "tg",
     "original"
+    
 } # Set of bad words to filter out
    
 
@@ -302,5 +303,5 @@ LOG_STR += ("Spell Check Mode is enabled, bot will be suggesting related movies 
 # ============================
 DEV_NAME = "Roaroic"
 DEV_CHANNEL = "@roaroic0"
-DEV_CHANNEL_LNK = "https://t.me/roaroic0"
+DEV_CHANNEL_LNK = "https://t.me/ironMan6081"
 DEV_CREDIT = f"Powered by {DEV_NAME} | Developer Channel: {DEV_CHANNEL}"
