@@ -189,17 +189,29 @@ async def _get_imdb_suggestion_poster(query, year=None):
 
 
 async def get_movie_details(query, id=False, file=None):
-    """Async IMDb lookup with an additional IMDb-native poster lookup."""
+    """IMDb metadata lookup; always try IMDb's own suggestion service for artwork."""
     import asyncio
+
     details = await asyncio.to_thread(_get_movie_details_sync, query, id, file)
+    lookup_title = (details or {}).get("title") or query
+    lookup_year = (details or {}).get("year")
+
+    # This lookup is independent: it still runs when Cinemagoer cannot find a title.
+    suggestion_poster = await _get_imdb_suggestion_poster(lookup_title, lookup_year)
     if not details:
-        return details
-    poster = await _get_imdb_suggestion_poster(
-        details.get("title") or query,
-        details.get("year")
-    )
-    if poster:
-        details["poster_url"] = poster
+        if suggestion_poster:
+            logger.info("IMDb suggestion poster found for %r", query)
+            return {"title": str(query), "poster_url": suggestion_poster}
+        logger.warning("IMDb metadata and suggestion poster both unavailable for %r", query)
+        return None
+
+    if suggestion_poster:
+        details["poster_url"] = suggestion_poster
+        logger.info("IMDb suggestion poster found for %r", query)
+    elif details.get("poster_url"):
+        logger.info("IMDb Cinemagoer poster found for %r", query)
+    else:
+        logger.warning("IMDb returned metadata but no poster for %r", query)
     return details
 
 
