@@ -41,7 +41,7 @@ class script(object):
 🌐 Tɪᴍᴇᴢᴏɴᴇ : <code>Asia/Kolkata</code>
 🛠️ Bᴜɪʟᴅ Sᴛᴀᴛᴜs: <code> v1.4 [ Sᴛᴀʙʟᴇ ]</code>
 
-⚡ Pᴏᴡᴇʀᴇᴅ ʙʏ <a href='https://t.me/+gLBpbDa_b5JkMGQ1'>Rᴏᴀʀᴏɪᴄ</a> | @roaroic0
+⚡ Pᴏᴡᴇʀᴇᴅ ʙʏ <a href='https://t.me/FilmsChor'>FilmsChor</a> | @FilmsChor
 </b>"""
 
     CHANNELS = """
