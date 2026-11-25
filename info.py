@@ -304,4 +304,4 @@ LOG_STR += ("Spell Check Mode is enabled, bot will be suggesting related movies 
 DEV_NAME = "Roaroic"
 DEV_CHANNEL = "@FilmsChor"
 DEV_CHANNEL_LNK = "https://t.me/ironMan6081"
-DEV_CREDIT = f"Powered by {FilmsChor} | Developer Channel: {@FilmsChor}"
+DEV_CREDIT = "Powered by FilmsChor | Developer Channel: @FilmsChor"
