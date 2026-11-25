@@ -38,28 +38,52 @@ class Database:
         return True
  
      
-    async def add_join_req(self, user_id: int, channel_id: int): #update
+    async def add_join_req(self, user_id: int, channel_id: int):
+        # Refresh the request timestamp on every new request.
         await self.req.update_one(
-            {'user_id': user_id},
+            {'user_id': int(user_id)},
             {
-                '$addToSet': {'channels': channel_id},
+                '$addToSet': {'channels': int(channel_id)},
+                '$set': {
+                    f'request_at.{int(channel_id)}': datetime.datetime.utcnow()
+                },
                 '$setOnInsert': {'created_at': datetime.datetime.utcnow()}
             },
             upsert=True
         )
-        
+
     async def has_joined_channel(self, user_id: int, channel_id: int):
-        doc = await self.req.find_one({'user_id': user_id})
-        return doc and 'channels' in doc and channel_id in doc['channels']
+        doc = await self.req.find_one({'user_id': int(user_id)})
+        if not doc or int(channel_id) not in doc.get('channels', []):
+            return False
+
+        # Old records without timestamps are not trusted: they may be declined
+        # requests left over from an earlier bot version.
+        requested_at = doc.get('request_at', {}).get(str(int(channel_id)))
+        if not isinstance(requested_at, datetime.datetime):
+            await self.remove_join_req(user_id, channel_id)
+            return False
+
+        if requested_at.tzinfo is not None:
+            requested_at = requested_at.replace(tzinfo=None)
+        if datetime.datetime.utcnow() - requested_at > datetime.timedelta(days=7):
+            await self.remove_join_req(user_id, channel_id)
+            return False
+        return True
 
     async def remove_join_req(self, user_id: int, channel_id: int):
+        user_id = int(user_id)
+        channel_id = int(channel_id)
         await self.req.update_one(
             {'user_id': user_id},
-            {'$pull': {'channels': channel_id}}
+            {
+                '$pull': {'channels': channel_id},
+                '$unset': {f'request_at.{channel_id}': ""}
+            }
         )
-        await self.req.delete_one(
-            {'user_id': user_id, 'channels': {'$in': [channel_id]}}
-        )
+        doc = await self.req.find_one({'user_id': user_id})
+        if doc and not doc.get('channels'):
+            await self.req.delete_one({'user_id': user_id})
 
     async def del_join_req(self):
         await self.req.drop()
