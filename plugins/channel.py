@@ -429,14 +429,20 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         )
         movie_doc["files"].append(file_data)
 
-        # Runtime comes only from the duration of the uploaded database video.
-        uploaded_runtime = format_uploaded_duration(duration_seconds)
-        if uploaded_runtime and movie_doc.get("runtime") in (None, "", "N/A"):
+        # Use the longest actual duration among every uploaded quality.
+        known_durations = [
+            int(item.get("duration_seconds") or 0)
+            for item in movie_doc.get("files", [])
+            if int(item.get("duration_seconds") or 0) > 0
+        ]
+        longest_duration = max(known_durations, default=0)
+        longest_runtime = format_uploaded_duration(longest_duration)
+        if longest_runtime and movie_doc.get("runtime") != longest_runtime:
             await db.movie_updates.update_one(
                 {"_id": base_name},
-                {"$set": {"runtime": uploaded_runtime}}
+                {"$set": {"runtime": longest_runtime}}
             )
-            movie_doc["runtime"] = uploaded_runtime
+            movie_doc["runtime"] = longest_runtime
 
         # Repair older movie records that were created without IMDb artwork/details.
         if (
@@ -895,9 +901,23 @@ def generate_movie_message(movie_doc, base_name):
     all_tags = set()
     episodes_by_season = defaultdict(set)
 
-    for file in movie_doc["files"]:
-        if file["quality"] != "N/A":
-            all_qualities.update(q.strip() for q in file["quality"].split(",") if q.strip())
+    for file in movie_doc.get("files", []):
+        # Re-check both the stored quality and original filename/caption-derived
+        # text so older records and uploads with multiple tags are not missed.
+        quality_source = " ".join(
+            str(file.get(key) or "")
+            for key in ("quality", "filename", "processed")
+        )
+        detected_qualities = get_qualities(quality_source)
+        quality_values = (
+            detected_qualities.split(",")
+            if detected_qualities != "N/A"
+            else str(file.get("quality") or "").split(",")
+        )
+        for quality in quality_values:
+            quality = format_quality_label(quality.strip())
+            if quality and quality != "N/A":
+                all_qualities.add(quality)
         if file["language"] != "N/A":
             all_languages.update(l.strip() for l in file["language"].split(",") if l.strip())
         if file["ott_platform"] != "N/A":
@@ -974,9 +994,8 @@ def generate_movie_message(movie_doc, base_name):
             rating = f"{float(rating):.1f}/10"
         except (TypeError, ValueError):
             pass
-    quality_str = ", ".join(
-        sorted(format_quality_label(quality) for quality in all_qualities)
-    ) if all_qualities else "N/A"
+    # Keep every detected quality in first-upload order, without duplicates.
+    quality_str = ", ".join(all_qualities) if all_qualities else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else (
         movie_doc.get("ott_platform") or "N/A"
