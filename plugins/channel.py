@@ -318,7 +318,11 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "year": media_info["year"] or imdb_details.get("year") or tmdb_details.get("year"),
             "tag": media_info["tag"],
             "ott_platform": details.get("ott_platform") or media_info["ott_platform"],
-            "online_languages": ", ".join(details.get("languages") or []),
+            "online_languages": (
+                details.get("languages")
+                if isinstance(details.get("languages"), str)
+                else ", ".join(details.get("languages") or [])
+            ),
             "message_id": None,
             "is_photo": False
         }
