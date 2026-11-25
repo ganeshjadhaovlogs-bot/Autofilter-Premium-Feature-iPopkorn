@@ -957,20 +957,38 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data.startswith("checksub"):
         try:
-            # Callback format: checksub#<start-prefix>#<chat_id>_<file_id>
             parts = query.data.split("#", 2)
-            if len(parts) != 3 or not parts[1] or "_" not in parts[2]:
+            if len(parts) != 3 or not parts[1] or not parts[2]:
                 await query.answer(
                     "⚠️ This button is invalid or expired. Please open the movie link again.",
                     show_alert=True
                 )
                 return
 
-            _, start_prefix, file_payload = parts
-            chat_part, file_id = file_payload.split("_", 1)
+            prefix, second, third = parts
+            # Support both callback formats used by older and newer messages:
+            # checksub#file#<chat_id>_<file_id>
+            # checksub#<chat_id>#<file_id>
             try:
-                chat_id = int(chat_part)
+                chat_id = int(second)
+                start_prefix = "file"
+                file_id = third
             except (TypeError, ValueError):
+                start_prefix = second
+                payload = third
+                if payload.startswith("file_"):
+                    payload = payload[5:]
+                try:
+                    chat_text, file_id = payload.split("_", 1)
+                    chat_id = int(chat_text)
+                except (TypeError, ValueError):
+                    await query.answer(
+                        "⚠️ This button is invalid or expired. Please open the movie link again.",
+                        show_alert=True
+                    )
+                    return
+
+            if not file_id:
                 await query.answer(
                     "⚠️ This button is invalid or expired. Please open the movie link again.",
                     show_alert=True
@@ -986,9 +1004,10 @@ async def cb_handler(client: Client, query: CallbackQuery):
             btn += await is_req_subscribed(client, query.from_user.id, AUTH_REQ_CHANNELS)
 
             if btn:
+                callback_payload = f"{chat_id}_{file_id}"
                 btn.append([InlineKeyboardButton(
                     "🔄 ᴛʀʏ ᴀɢᴀɪɴ",
-                    callback_data=f"checksub#{start_prefix}#{file_payload}"
+                    callback_data=f"checksub#file#{callback_payload}"
                 )])
                 try:
                     await query.edit_message_reply_markup(
@@ -1004,7 +1023,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 )
                 return
 
-            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={start_prefix}_{file_payload}")
+            await query.answer(
+                url=f"https://t.me/{temp.U_NAME}?start={start_prefix}_{chat_id}_{file_id}"
+            )
             await query.message.delete()
         except Exception as e:
             logger.exception("Error in checksub callback")
