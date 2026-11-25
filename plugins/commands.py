@@ -329,6 +329,11 @@ async def start(client, message):
             (settings.get('fsub', []) if settings else []) + AUTH_CHANNELS
         ))
 
+        if not fsub_channels and not AUTH_REQ_CHANNELS:
+            logger.error("Force Join blocked file delivery: no required channels are configured.")
+            await message.reply_text("⚠️ Required channel is not configured. Please contact the bot admin.")
+            return
+
         if fsub_channels:
             btn += await is_subscribed(client, message.from_user.id, fsub_channels)
         if AUTH_REQ_CHANNELS:
@@ -357,6 +362,9 @@ async def start(client, message):
     except Exception as e:
         await log_error(client, f"❗️ Force Sub Error:\n\n{repr(e)}")
         logger.error(f"❗️ Force Sub Error:\n\n{repr(e)}")
+        # Fail closed: never deliver a file when force-join validation fails.
+        await message.reply_text("⚠️ Channel verification failed. Please try again shortly.")
+        return
 
     # Fetch file details only after force-join validation.
     file_details_task = asyncio.create_task(get_file_details(file_id))
