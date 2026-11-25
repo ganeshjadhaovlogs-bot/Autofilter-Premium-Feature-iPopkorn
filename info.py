@@ -63,6 +63,7 @@ SUPPORT_CHAT = environ.get('SUPPORT_CHAT', 'https://t.me/+cNr_1nOUfTdjYTdl')  # 
 # FORCE_SUB 
 auth_req_channels = environ.get("AUTH_REQ_CHANNELS", "-100")# requst to join Channel for force sub (make sure bot is admin) only for bot ADMINS  
 auth_channels     = environ.get("AUTH_CHANNELS", "-100")# Channels for force sub (make sure bot is admin)
+FORCE_JOIN_LINK = environ.get("FORCE_JOIN_LINK", "https://t.me/+F3VKRo_2MDZhNjU1")  # User-facing Force Join invite link
 
 # ============================
 # Payment Configuration
