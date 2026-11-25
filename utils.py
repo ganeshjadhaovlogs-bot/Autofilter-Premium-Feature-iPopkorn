@@ -91,17 +91,31 @@ async def is_subscribed(bot, user_id, fsub_channels):
     
     async def check_channel(channel_id):
         try:
-            # No need to get chat object separately
-            await bot.get_chat_member(channel_id, user_id)
+            # Current membership always takes priority over an old request record.
+            member = await bot.get_chat_member(channel_id, user_id)
+            if member.status != enums.ChatMemberStatus.BANNED:
+                return None
         except UserNotParticipant:
-            try:
-                chat = await bot.get_chat(int(channel_id))
-                invite_link = await bot.create_chat_invite_link(channel_id)
-                return InlineKeyboardButton(f"📢 Join {chat.title}", url=invite_link.invite_link)
-            except Exception as e:
-                logger.warning(f"Failed to create invite for {channel_id}: {e}")
+            # A submitted join request is accepted as pending until the channel
+            # admin approves or declines it.
+            if await db.has_joined_channel(user_id, channel_id):
+                return None
         except Exception as e:
             logger.exception(f"is_subscribed error for {channel_id}: {e}")
+            return None
+
+        try:
+            chat = await bot.get_chat(int(channel_id))
+            invite_link = await bot.create_chat_invite_link(
+                channel_id,
+                creates_join_request=True
+            )
+            return InlineKeyboardButton(
+                f"📨 Request to Join {chat.title}",
+                url=invite_link.invite_link
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create join-request invite for {channel_id}: {e}")
         return None
 
     tasks = [check_channel(channel_id) for channel_id in fsub_channels]
