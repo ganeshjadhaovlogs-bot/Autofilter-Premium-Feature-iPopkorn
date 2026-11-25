@@ -333,6 +333,72 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             {"$push": {"files": file_data}}
         )
         movie_doc["files"].append(file_data)
+
+        # Repair older movie records that were created without IMDb artwork/details.
+        if (
+            not movie_doc.get("poster_url")
+            or movie_doc.get("genres") in (None, "", "N/A")
+            or movie_doc.get("rating") in (None, "", "N/A")
+            or movie_doc.get("runtime") in (None, "", "N/A")
+        ):
+            imdb_details = await get_movie_details(base_name) or {}
+            tmdb_details = {}
+            if TMDB_POSTER and not imdb_details.get("poster_url"):
+                tmdb_details = await get_movie_detailsx(base_name) or {}
+
+            poster_url = (
+                imdb_details.get("poster_url")
+                or movie_doc.get("poster_url")
+                or (
+                    tmdb_details.get("backdrop_url")
+                    if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
+                    else tmdb_details.get("poster_url")
+                )
+            )
+            updates = {}
+            if poster_url:
+                updates["poster_url"] = poster_url
+                updates["backup_poster_url"] = (
+                    tmdb_details.get("poster_url")
+                    if imdb_details.get("poster_url") and tmdb_details.get("poster_url")
+                    else movie_doc.get("backup_poster_url")
+                )
+            for field in ("genres", "rating", "runtime", "year"):
+                current = movie_doc.get(field)
+                candidate = imdb_details.get(field) or tmdb_details.get(field)
+                if candidate and current in (None, "", "N/A"):
+                    if field == "genres" and not isinstance(candidate, str):
+                        candidate = ", ".join(candidate)
+                    updates[field] = candidate
+            if imdb_details.get("url"):
+                updates["imdb_url"] = imdb_details["url"]
+
+            if updates:
+                await db.movie_updates.update_one(
+                    {"_id": base_name},
+                    {"$set": updates}
+                )
+                movie_doc.update(updates)
+
+                # Replace the old fallback-only post with the real IMDb poster.
+                if poster_url and movie_doc.get("message_id"):
+                    try:
+                        await bot.delete_messages(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            message_ids=movie_doc["message_id"]
+                        )
+                        await db.movie_updates.update_one(
+                            {"_id": base_name},
+                            {"$set": {"message_id": None, "is_photo": False}}
+                        )
+                        movie_doc["message_id"] = None
+                        await send_movie_update(bot, base_name)
+                    except Exception:
+                        logger.exception(
+                            "Could not refresh old movie post with IMDb artwork: %s",
+                            base_name
+                        )
+
         schedule_update(bot, base_name)
 
 async def send_movie_update(bot, base_name):
