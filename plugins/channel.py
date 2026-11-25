@@ -758,10 +758,18 @@ async def update_movie_message(bot, base_name):
             return
         except MessageIdInvalid:
             logger.warning(
-                "Stored announcement message %s for %s is no longer editable; "
-                "leaving channel history untouched.",
+                "Stored announcement message %s for %s is no longer valid; "
+                "creating a replacement announcement.",
                 message_id, base_name
             )
+            # The saved Telegram message no longer exists or cannot be edited.
+            # Clear the stale ID so the normal sender creates a fresh 16:9 post
+            # and stores its new message ID for subsequent quality updates.
+            await db.movie_updates.update_one(
+                {"_id": base_name},
+                {"$set": {"message_id": None, "is_photo": False}}
+            )
+            await send_movie_update(bot, base_name)
             return
         except Exception:
             logger.exception(
