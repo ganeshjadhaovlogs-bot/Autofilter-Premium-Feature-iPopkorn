@@ -564,27 +564,21 @@ async def update_movie_message(bot, base_name):
                     if resized_poster:
                         break
 
-                if resized_poster:
-                    media = InputMediaPhoto(
-                        media=resized_poster,
-                        caption=text,
-                        parse_mode=enums.ParseMode.HTML
-                    )
-                    await bot.edit_message_media(
-                        chat_id=MOVIE_UPDATE_CHANNEL,
-                        message_id=message_id,
-                        media=media,
-                        reply_markup=buttons
-                    )
-                else:
-                    # Keep the existing artwork if the refreshed URL is unavailable.
-                    await bot.edit_message_caption(
-                        chat_id=MOVIE_UPDATE_CHANNEL,
-                        message_id=message_id,
-                        caption=text,
-                        reply_markup=buttons,
-                        parse_mode=enums.ParseMode.HTML
-                    )
+                if not resized_poster:
+                    # Never leave a photo announcement without artwork after refresh.
+                    resized_poster = generate_fallback_poster(movie_doc, base_name)
+
+                media = InputMediaPhoto(
+                    media=resized_poster,
+                    caption=text,
+                    parse_mode=enums.ParseMode.HTML
+                )
+                await bot.edit_message_media(
+                    chat_id=MOVIE_UPDATE_CHANNEL,
+                    message_id=message_id,
+                    media=media,
+                    reply_markup=buttons
+                )
             else:
                 # Telegram cannot turn a text message into a photo by editing it.
                 # Upgrade legacy text-only announcements by sending the photo first,
@@ -967,14 +961,19 @@ async def refresh_all_movie_metadata(bot, message):
                     online_languages = ", ".join(str(item) for item in online_languages if item)
                 updates = {
                     "title": details.get("title") or base_name,
+                    # Keep previously saved values when a provider temporarily
+                    # omits a field or returns an empty result.
                     "genres": genres if genres != "N/A" else (movie_doc.get("genres") or "N/A"),
-                    "rating": details.get("rating") or movie_doc.get("rating") or "N/A",
+                    "rating": details.get("rating") if details.get("rating") not in (None, "", "N/A") else (movie_doc.get("rating") or "N/A"),
                     "runtime": format_runtime(details.get("runtime")) or format_runtime(movie_doc.get("runtime")) or "N/A",
                     "year": details.get("year") or movie_doc.get("year"),
                     "ott_platform": tmdb_details.get("ott_platform") or movie_doc.get("ott_platform") or "N/A",
                     "online_languages": online_languages or movie_doc.get("online_languages") or "N/A",
-                    "poster_url": poster_url,
-                    "backup_poster_url": tmdb_poster if poster_url and poster_url != tmdb_poster else None,
+                    "poster_url": poster_url or movie_doc.get("poster_url") or movie_doc.get("backup_poster_url"),
+                    "backup_poster_url": (
+                        tmdb_poster if poster_url and poster_url != tmdb_poster
+                        else movie_doc.get("backup_poster_url")
+                    ),
                     "imdb_url": imdb_details.get("url") or movie_doc.get("imdb_url") or (
                         f"https://www.imdb.com/title/{imdb_details['imdb_id']}"
                         if imdb_details.get("imdb_id") else details.get("tmdb_url", "")
