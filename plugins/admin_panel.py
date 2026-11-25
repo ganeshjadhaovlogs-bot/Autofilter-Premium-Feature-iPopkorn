@@ -114,6 +114,9 @@ async def get_flag(key, default):
     if cached and time.time() - cached[1] < 30:
         return cached[0]
     try:
+        # The panel may be called before Pyrogram has initialized the bot ID.
+        if temp.ME is None:
+            return default
         val = await db.get_bot_setting(temp.ME, key, default)
     except Exception:
         logger.exception("get_flag(%s) failed", key)
