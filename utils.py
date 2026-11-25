@@ -57,34 +57,30 @@ class temp(object):
     TEMP_INVITE_LINKS = {}
 
 async def _has_live_join_request(bot, channel_id, user_id):
-    """Check Telegram's current pending join-request list for this exact user."""
-    try:
-        # Explicitly request a recent page. Telegram returns newest pending
-        # requests first, so a newly submitted request is included here.
-        async for request in bot.get_chat_join_requests(channel_id, limit=100):
-            request_user = getattr(request, "user", None)
-            if request_user and request_user.id == user_id:
-                await db.add_join_req(user_id, channel_id)
-                logger.info(
-                    f"Pending join request confirmed: user={user_id}, channel={channel_id}"
-                )
-                return True
+    """Check the join-request update recorded by the bot.
 
+    Pyrogram's get_chat_join_requests method is user-account-only, so a bot
+    cannot use it to list Telegram's pending requests. The chat_join_request
+    handler records requests in the database; use that record for Try Again.
+    """
+    try:
+        has_request = await db.has_joined_channel(user_id, channel_id)
+        if has_request:
+            logger.info(
+                f"Pending join request record found: user={user_id}, channel={channel_id}"
+            )
+            return True
+
+        logger.info(
+            f"No recorded join request: user={user_id}, channel={channel_id}"
+        )
+        return False
     except Exception as e:
         logger.warning(
-            f"Could not verify pending join request for user {user_id} "
+            f"Could not check recorded join request for user {user_id} "
             f"in channel {channel_id}: {e}"
         )
-        # Do not grant access from a stale database record.
-        await db.remove_join_req(user_id, channel_id)
         return False
-
-    # Telegram has no pending request for this user; clear stale cached data.
-    await db.remove_join_req(user_id, channel_id)
-    logger.info(
-        f"No pending join request: user={user_id}, channel={channel_id}"
-    )
-    return False
 
 
 async def is_req_subscribed(bot, user_id, rqfsub_channels):
