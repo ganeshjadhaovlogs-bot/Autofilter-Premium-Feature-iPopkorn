@@ -77,7 +77,7 @@ async def is_req_subscribed(bot, user_id, rqfsub_channels):
             # alone must never grant access after a request was declined.
             is_pending = False
             async for request in bot.get_chat_join_requests(
-                ch_id, query=str(user_id), limit=100
+                ch_id, limit=0
             ):
                 if getattr(getattr(request, "user", None), "id", None) == user_id:
                     is_pending = True
@@ -122,7 +122,7 @@ async def is_subscribed(bot, user_id, fsub_channels):
         try:
             is_pending = False
             async for request in bot.get_chat_join_requests(
-                channel_id, query=str(user_id), limit=100
+                channel_id, limit=0
             ):
                 if getattr(getattr(request, "user", None), "id", None) == user_id:
                     is_pending = True
