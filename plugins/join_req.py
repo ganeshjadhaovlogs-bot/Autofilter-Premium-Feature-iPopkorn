@@ -21,10 +21,15 @@ async def join_reqs(client, message: ChatJoinRequest):
 
 @Client.on_chat_member_updated(filters.chat(AUTH_REQ_CHANNELS + AUTH_CHANNELS))
 async def clear_request_when_user_leaves(client, update: ChatMemberUpdated):
-    # Remove old pending-request access when a user leaves or is banned.
-    new_status = update.new_chat_member.status
+    # from_user is the actor (which can be an admin), not always the
+    # member whose status changed. Clear the request for the affected user.
+    new_member = update.new_chat_member
+    if not new_member:
+        return
+
+    new_status = new_member.status
     if new_status in (enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED):
-        await db.del_join_req(update.from_user.id, update.chat.id)
+        await db.del_join_req(new_member.user.id, update.chat.id)
 
 @Client.on_message(filters.command("delreq") & filters.private & filters.user(ADMINS))
 async def del_requests(client, message):
