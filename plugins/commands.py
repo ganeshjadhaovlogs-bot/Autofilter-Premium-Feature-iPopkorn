@@ -350,9 +350,7 @@ async def start(client, message):
     except Exception as e:
         await log_error(client, f"❗️ Force Sub Error:\n\n{repr(e)}")
         logger.error(f"❗️ Force Sub Error:\n\n{repr(e)}")
-        return await message.reply_text(
-            "⚠️ Channel verification is temporarily unavailable. Please try the file link again shortly."
-        )
+        return
 
 
     user_id = m.from_user.id
