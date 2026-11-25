@@ -111,6 +111,18 @@ def get_qualities(text: str) -> str:
     qualities = QUALITY_PATTERN.findall(text)
     return ", ".join(qualities) if qualities else "N/A"
 
+def format_uploaded_duration(seconds):
+    """Format the duration reported by Telegram for the actual uploaded media."""
+    try:
+        total_minutes = int(seconds) // 60
+    except (TypeError, ValueError):
+        return None
+    if total_minutes <= 0:
+        return None
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours}h {minutes}m" if hours and minutes else (f"{hours}h" if hours else f"{minutes}m")
+
+
 def format_runtime(value):
     """Normalize IMDb/TMDB runtime values, including ISO-8601 and TV episode runtimes."""
     if value in (None, "", "N/A"):
@@ -257,17 +269,19 @@ async def media_handler(bot, message):
 
     media.file_type = next(ft for ft in ("document", "video", "audio") if hasattr(message, ft))
     media.caption = message.caption or ""
+    # Telegram supplies the actual duration (seconds) for uploaded video/audio media.
+    media.duration = getattr(media, "duration", None)
     success, info = await save_file(media)
     if not success:
         return
 
     try:
         if await db.movie_update_status(bot.me.id):
-            await process_and_send_update(bot, media.file_name, media.caption)
+            await process_and_send_update(bot, media.file_name, media.caption, media.duration)
     except Exception:
         logger.exception("Error processing media")
 
-async def process_and_send_update(bot, filename, caption):
+async def process_and_send_update(bot, filename, caption, duration_seconds=None):
     try:
         media_info = extract_media_info(filename, caption)
         base_name = media_info["base_name"]
@@ -275,7 +289,7 @@ async def process_and_send_update(bot, filename, caption):
 
         lock = locks[base_name]
         async with lock:
-            await _process_with_lock(bot, filename, caption, media_info, base_name, processed)
+            await _process_with_lock(bot, filename, caption, media_info, base_name, processed, duration_seconds)
     except PyMongoError as e:
         logger.error("Database error: %s", e)
     except Exception as e:
@@ -283,7 +297,7 @@ async def process_and_send_update(bot, filename, caption):
 
 error_tmdb = False
 
-async def _process_with_lock(bot, filename, caption, media_info, base_name, processed):
+async def _process_with_lock(bot, filename, caption, media_info, base_name, processed, duration_seconds=None):
     if not hasattr(db, 'movie_updates'):
         db.movie_updates = db.db.movie_updates
 
@@ -299,7 +313,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         "timestamp": datetime.now(),
         "tag": media_info["tag"],
         "season": media_info["season"],
-        "episode": media_info["episode"]
+        "episode": media_info["episode"],
+        "duration_seconds": int(duration_seconds) if duration_seconds else None
     }
 
     if not movie_doc:
@@ -360,7 +375,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "is_landscape": True,
             "genres": genres,
             "rating": details.get("rating") or "N/A",
-            "runtime": format_runtime(details.get("runtime") or imdb_details.get("runtime") or tmdb_details.get("runtime") or tmdb_details.get("episode_run_time")) or "N/A",
+            "runtime": format_uploaded_duration(duration_seconds) or "N/A",
             "imdb_url": imdb_details.get("url") or (
                 f"https://www.imdb.com/title/{imdb_details.get('imdb_id')}"
                 if imdb_details.get("imdb_id") else
@@ -400,6 +415,15 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             {"$push": {"files": file_data}}
         )
         movie_doc["files"].append(file_data)
+
+        # Runtime comes only from the duration of the uploaded database video.
+        uploaded_runtime = format_uploaded_duration(duration_seconds)
+        if uploaded_runtime and movie_doc.get("runtime") in (None, "", "N/A"):
+            await db.movie_updates.update_one(
+                {"_id": base_name},
+                {"$set": {"runtime": uploaded_runtime}}
+            )
+            movie_doc["runtime"] = uploaded_runtime
 
         # Repair older movie records that were created without IMDb artwork/details.
         if (
@@ -449,18 +473,12 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             title_candidate = imdb_details.get("title") or tmdb_details.get("title")
             if title_candidate and not movie_doc.get("title"):
                 updates["title"] = title_candidate
-            for field in ("genres", "rating", "runtime", "year"):
+            for field in ("genres", "rating", "year"):
                 current = movie_doc.get(field)
                 candidate = imdb_details.get(field) or tmdb_details.get(field)
-                if field == "runtime":
-                    candidate = candidate or imdb_details.get("runtimes") or tmdb_details.get("episode_run_time")
                 if candidate and current in (None, "", "N/A"):
                     if field == "genres" and not isinstance(candidate, str):
                         candidate = ", ".join(str(item) for item in candidate)
-                    elif field == "runtime":
-                        candidate = format_runtime(candidate)
-                        if not candidate:
-                            continue
                     updates[field] = candidate
 
             online_languages = tmdb_details.get("languages") or []
