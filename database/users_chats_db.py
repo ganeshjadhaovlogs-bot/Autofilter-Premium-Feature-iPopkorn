@@ -64,6 +64,18 @@ class Database:
         )
         await self.req.delete_one({'user_id': user_id, 'channels': {'$size': 0}})
 
+    async def clear_user_access_data(self, user_id):
+        """Forget a user's bot access state after they leave a required channel."""
+        user_id = int(user_id)
+        # Remove all per-user state so a later return starts as a fresh user.
+        await self.col.delete_many({'id': user_id})
+        await self.users.delete_many({'id': user_id})
+        await self.req.delete_many({'user_id': user_id})
+        await self.misc.delete_many({'user_id': user_id})
+        await self.verify_id.delete_many({'user_id': user_id})
+        await self.daily.delete_many({'_id': user_id})
+        await self.codes.delete_many({'user_id': user_id})
+
     def new_user(self, id, name):
         return dict(
             id = id,
