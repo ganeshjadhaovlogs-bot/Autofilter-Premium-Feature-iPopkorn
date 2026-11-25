@@ -985,35 +985,89 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
 
     elif query.data.startswith("killfilesdq"):
-        ident, keyword = query.data.split("#")
+        ident, keyword = query.data.split("#", 1)
         await query.message.edit_text(f"<b>Fetching Files for your query {keyword} on DB... Please wait...</b>")
         files, total = await get_bad_files(keyword)
-        await query.message.edit_text("<b>ꜰɪʟᴇ ᴅᴇʟᴇᴛɪᴏɴ ᴘʀᴏᴄᴇꜱꜱ ᴡɪʟʟ ꜱᴛᴀʀᴛ ɪɴ 5 ꜱᴇᴄᴏɴᴅꜱ !</b>")
+        await query.message.edit_text("<b>ꜰɪʟᴇ ᴅᴇʟᴇᴛɪᴏɴ ᴘʀᴏᴄᴇss ᴡɪʟʟ sᴛᴀʀᴛ ɪɴ 5 sᴇᴄᴏɴᴅs !</b>")
         await asyncio.sleep(5)
         deleted = 0
+        deleted_names = []
         async with lock:
             try:
                 for file in files:
                     file_ids = file.file_id
                     file_name = file.file_name
-                    result = await Media.collection.delete_one({
-                        '_id': file_ids,
-                    })
+                    result = await Media.collection.delete_one({'_id': file_ids})
                     if not result.deleted_count and MULTIPLE_DB:
-                        result = await Media2.collection.delete_one({
-                            '_id': file_ids,
-                        })
+                        result = await Media2.collection.delete_one({'_id': file_ids})
                     if result.deleted_count:
+                        deleted += result.deleted_count
+                        deleted_names.append(file_name)
                         logger.info(
-                            f'ꜰɪʟᴇ ꜰᴏᴜɴᴅ ꜰᴏʀ ʏᴏᴜʀ ǫᴜᴇʀʏ {keyword}! ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ {file_name} ꜰʀᴏᴍ ᴅᴀᴛᴀʙᴀꜱᴇ.')
-                    deleted += 1
-                    if deleted % 20 == 0:
-                        await query.message.edit_text(f"<b>ᴘʀᴏᴄᴇꜱꜱ ꜱᴛᴀʀᴛᴇᴅ ꜰᴏʀ ᴅᴇʟᴇᴛɪɴɢ ꜰɪʟᴇꜱ ꜰʀᴏᴍ ᴅʙ. ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ {str(deleted)} ꜰɪʟᴇꜱ ꜰʀᴏᴍ ᴅʙ ꜰᴏʀ ʏᴏᴜʀ ǫᴜᴇʀʏ {keyword} !\n\nᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ...</b>")
+                            f"Deleted '{file_name}' from database for query '{keyword}'."
+                        )
+                    if deleted and deleted % 20 == 0:
+                        await query.message.edit_text(
+                            f"<b>ᴅᴇʟᴇᴛɪɴɢ ꜰɪʟᴇs... {deleted} files deleted. Please wait...</b>"
+                        )
+
+                # Keep the channel announcement in sync with the files still in DB.
+                deleted_keys = {
+                    re.sub(r"[^a-z0-9]+", " ", str(name).lower()).strip()
+                    for name in deleted_names
+                }
+                if deleted_keys:
+                    async for movie_doc in db.movie_updates.find({}):
+                        movie_files = movie_doc.get("files", [])
+                        remaining_files = [
+                            item for item in movie_files
+                            if re.sub(
+                                r"[^a-z0-9]+", " ",
+                                str(item.get("filename", "")).lower()
+                            ).strip() not in deleted_keys
+                        ]
+                        if len(remaining_files) == len(movie_files):
+                            continue
+
+                        base_name = movie_doc["_id"]
+                        if remaining_files:
+                            await db.movie_updates.update_one(
+                                {"_id": base_name},
+                                {"$set": {"files": remaining_files}}
+                            )
+                            try:
+                                from plugins.channel import update_movie_message
+                                await update_movie_message(client, base_name)
+                            except Exception:
+                                logger.exception(
+                                    "Could not update channel announcement for %s", base_name
+                                )
+                        else:
+                            message_id = movie_doc.get("message_id")
+                            if message_id:
+                                try:
+                                    await client.delete_messages(
+                                        chat_id=MOVIE_UPDATE_CHANNEL,
+                                        message_ids=message_id
+                                    )
+                                except Exception:
+                                    # Keep the movie record if its channel post could not
+                                    # be removed, so a later retry/re-upload won't orphan it.
+                                    logger.exception(
+                                        "Could not delete channel announcement for %s", base_name
+                                    )
+                                    continue
+                            await db.movie_updates.delete_one({"_id": base_name})
+
             except Exception as e:
-                print(f"Error In killfiledq -{e}")
-                await query.message.edit_text(f'Error: {e}')
+                logger.exception("Error in killfilesdq")
+                await query.message.edit_text(f"Error: {e}")
             else:
-                await query.message.edit_text(f"<b>ᴘʀᴏᴄᴇꜱꜱ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ꜰᴏʀ ꜰɪʟᴇ ᴅᴇʟᴇᴛᴀᴛɪᴏɴ !\n\nꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ {str(deleted)} ꜰɪʟᴇꜱ ꜰʀᴏᴍ ᴅʙ ꜰᴏʀ ʏᴏᴜʀ ǫᴜᴇʀʏ {keyword}.</b>")
+                await query.message.edit_text(
+                    f"<b>ᴅᴇʟᴇᴛɪᴏɴ ᴄᴏᴍᴘʟᴇᴛᴇ ✅\n\n"
+                    f"Database files deleted: {deleted}\n"
+                    f"Channel announcements updated/deleted automatically.</b>"
+                )
 
     elif query.data.startswith("opnsetgrp"):
         ident, grp_id = query.data.split("#")
