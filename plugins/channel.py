@@ -411,25 +411,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 )
                 movie_doc.update(updates)
 
-                # Replace the old fallback-only post with the real IMDb poster.
-                if poster_url and movie_doc.get("message_id"):
-                    try:
-                        await bot.delete_messages(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            message_ids=movie_doc["message_id"]
-                        )
-                        await db.movie_updates.update_one(
-                            {"_id": base_name},
-                            {"$set": {"message_id": None, "is_photo": False}}
-                        )
-                        movie_doc["message_id"] = None
-                        await send_movie_update(bot, base_name)
-                    except Exception:
-                        logger.exception(
-                            "Could not refresh old movie post with IMDb artwork: %s",
-                            base_name
-                        )
-
+                # Keep the existing channel post; metadata/artwork changes are
+                # applied by editing that same post below.
         schedule_update(bot, base_name)
 
 async def send_movie_update(bot, base_name):
@@ -537,33 +520,32 @@ async def update_movie_message(bot, base_name):
                     reply_markup=buttons,
                     parse_mode=enums.ParseMode.HTML
                 )
-                return
-            # Upgrade an older text-only notification to a photo post.
-            await bot.delete_messages(
-                chat_id=MOVIE_UPDATE_CHANNEL,
-                message_ids=message_id
-            )
-            await db.movie_updates.update_one(
-                {"_id": base_name},
-                {"$set": {"message_id": None, "is_photo": False}}
-            )
-            await send_movie_update(bot, base_name)
-            return
-        except (MessageIdInvalid, MessageNotModified):
-            pass
-        except Exception:
-            try:
-                await bot.delete_messages(
+            else:
+                # Preserve older text-only posts too; never delete them automatically.
+                await bot.edit_message_text(
                     chat_id=MOVIE_UPDATE_CHANNEL,
-                    message_ids=message_id
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=buttons,
+                    parse_mode=enums.ParseMode.HTML,
+                    disable_web_page_preview=True
                 )
-                await db.movie_updates.update_one(
-                    {"_id": base_name},
-                    {"$set": {"message_id": None, "is_photo": False}}
-                )
-            except Exception:
-                pass
-            await send_movie_update(bot, base_name)
+            return
+        except MessageNotModified:
+            return
+        except MessageIdInvalid:
+            logger.warning(
+                "Stored announcement message %s for %s is no longer editable; "
+                "leaving channel history untouched.",
+                message_id, base_name
+            )
+            return
+        except Exception:
+            logger.exception(
+                "Could not edit existing announcement for %s; keeping the old post.",
+                base_name
+            )
+            return
     except Exception as e:
         logger.error(f"Failed to update movie message: {e}")
 
@@ -881,25 +863,10 @@ async def refresh_all_movie_metadata(bot, message):
                     stopped = True
                     break
 
-                old_message_id = movie_doc.get("message_id")
-                if old_message_id and poster_url:
-                    try:
-                        await bot.delete_messages(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            message_ids=old_message_id
-                        )
-                        await db.movie_updates.update_one(
-                            {"_id": base_name},
-                            {"$set": {"message_id": None, "is_photo": False}}
-                        )
-                        movie_doc["message_id"] = None
-                        await send_movie_update(bot, base_name)
-                        posted += 1
-                    except Exception:
-                        logger.exception("Could not replace old movie post during refresh: %s", base_name)
-                        await update_movie_message(bot, base_name)
-                else:
-                    await update_movie_message(bot, base_name)
+                # Refresh metadata by editing the existing channel post in place.
+                await update_movie_message(bot, base_name)
+                if movie_doc.get("message_id"):
+                    posted += 1
 
                 if refresh_stop_requested:
                     stopped = True
