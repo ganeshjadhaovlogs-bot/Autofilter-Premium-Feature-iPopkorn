@@ -3,12 +3,13 @@
 # https://t.me/roaroic0
 # ─────────────────────────────────────────────
 import re
+import difflib
 import aiohttp
 import warnings
 import logging
 from io import BytesIO
 from urllib.parse import quote
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 from info import ROAROIC_IMAGE_FETCH, TMDB_API_KEY
 from imdb import Cinemagoer
 
@@ -52,13 +53,26 @@ async def fetch_image(url, size=(860, 1200)):
                     logger.error("Poster URL returned an empty response: %s", url[:180])
                     return None
 
-                # Some image CDNs label valid image bytes as application/octet-stream.
-                # Let Pillow verify the actual payload instead of trusting Content-Type.
-                img = Image.open(BytesIO(data)).convert("RGB")
-                # Crop/resize without stretching so the final channel artwork stays 16:9.
-                img = ImageOps.fit(img, size, method=Image.LANCZOS, centering=(0.5, 0.5))
+                # Preserve the full source poster. Portrait IMDb posters were
+                # previously center-cropped into 16:9, cutting off artwork and text.
+                source = Image.open(BytesIO(data)).convert("RGB")
+                target_w, target_h = size
+                if source.width / max(source.height, 1) > 1.45:
+                    img = ImageOps.fit(source, size, method=Image.Resampling.LANCZOS)
+                else:
+                    background = ImageOps.fit(source, size, method=Image.Resampling.LANCZOS)
+                    background = background.filter(ImageFilter.GaussianBlur(radius=24))
+                    foreground = ImageOps.contain(
+                        source,
+                        (int(target_w * 0.62), int(target_h * 0.92)),
+                        method=Image.Resampling.LANCZOS
+                    )
+                    x = (target_w - foreground.width) // 2
+                    y = (target_h - foreground.height) // 2
+                    background.paste(foreground, (x, y))
+                    img = background
                 out = BytesIO()
-                img.save(out, format="JPEG", quality=92)
+                img.save(out, format="JPEG", quality=96, subsampling=0)
                 out.seek(0)
                 out.name = "imdb_movie_poster.jpg"
                 return out
@@ -87,20 +101,50 @@ def _get_movie_details_sync(query, id=False, file=None):
             if not title:
                 title = raw_query
 
-            results = ia.search_movie(title, results=15)
+            results = ia.search_movie(title, results=30)
             if not results:
                 logger.warning("IMDb found no results for title: %s", title)
                 return None
 
+            def norm_title(value):
+                return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
             candidates = [
                 item for item in results
-                if item.get("kind") in ("movie", "tv series", "tv mini series", "tv movie")
-            ] or results
+                if item.get("kind") in ("movie", "tv series", "tv mini series", "tv movie", "tv short")
+            ]
+            if not candidates:
+                candidates = results
+
+            target = norm_title(title)
+            exact = [item for item in candidates if norm_title(item.get("title")) == target]
             if year:
-                year_matches = [item for item in candidates if str(item.get("year", "")) == year]
-                if year_matches:
-                    candidates = year_matches
-            movie_id = candidates[0].movieID
+                exact_year = [item for item in exact if str(item.get("year", "")) == year]
+                if exact_year:
+                    exact = exact_year
+                elif exact:
+                    logger.warning("IMDb title matched but requested year %s did not; refusing ambiguous match for %s", year, title)
+                    return None
+
+            if exact:
+                chosen = exact[0]
+            else:
+                scored = sorted(
+                    ((difflib.SequenceMatcher(None, target, norm_title(item.get("title"))).ratio(), item)
+                     for item in candidates),
+                    key=lambda pair: pair[0],
+                    reverse=True
+                )
+                if not scored or scored[0][0] < 0.88:
+                    logger.warning("IMDb has no confident title match for %r", title)
+                    return None
+                best_score, chosen = scored[0]
+                if year and str(chosen.get("year", "")) != year:
+                    logger.warning("IMDb close title match has wrong year for %r; refusing poster/details", title)
+                    return None
+                logger.info("IMDb accepted close title match %r (score %.2f) for %r", chosen.get("title"), best_score, title)
+
+            movie_id = chosen.movieID
         else:
             movie_id = str(query).removeprefix("tt")
 
@@ -148,12 +192,17 @@ def _get_movie_details_sync(query, id=False, file=None):
 
 
 async def _get_imdb_suggestion_poster(query, year=None):
-    """Get a poster image URL from IMDb's public title-suggestion response."""
+    """Return artwork only for a confident IMDb title/year match."""
     try:
-        title = re.sub(r'\s*\(?[12]\d{3}\)?$', '', str(query or '')).strip()
+        raw_query = str(query or "").strip()
+        year_match = re.search(r"\b([12]\d{3})\b\s*\)?$", raw_query)
+        if not year and year_match:
+            year = year_match.group(1)
+        title = re.sub(r"\s*\(?[12]\d{3}\)?$", "", raw_query).strip()
         if not title:
             return None
-        url = f"https://v2.sg.media-imdb.com/suggestion/x/{quote(title, safe='')}.json"
+
+        url = f"https://v3.sg.media-imdb.com/suggestion/titles/x/{quote(title.lower(), safe='')}.json"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
             "Accept": "application/json,text/plain,*/*",
@@ -161,32 +210,66 @@ async def _get_imdb_suggestion_poster(query, year=None):
         }
         timeout = aiohttp.ClientTimeout(total=12, connect=6)
         async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
-            async with session.get(url) as response:
+            async with session.get(url, params={"includeVideos": "0"}) as response:
                 if response.status != 200:
-                    logger.warning("IMDb suggestion lookup returned HTTP %s for %s", response.status, title)
+                    logger.warning("IMDb suggestion lookup HTTP %s for %s", response.status, title)
                     return None
                 payload = await response.json(content_type=None)
 
+        def norm_title(value):
+            return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+        target = norm_title(title)
         items = payload.get("d", []) if isinstance(payload, dict) else []
-        title_key = re.sub(r'[^a-z0-9]+', '', title.lower())
-        candidates = [
-            item for item in items
-            if str(item.get("id", "")).startswith("tt") and item.get("i", {}).get("imageUrl")
-        ]
+        candidates = []
+        for item in items:
+            if not str(item.get("id", "")).startswith("tt"):
+                continue
+            if item.get("qid") not in (None, "movie", "tvSeries", "tvMiniSeries", "tvMovie", "tvEpisode"):
+                continue
+            image = item.get("i")
+            if isinstance(image, list):
+                image = {"imageUrl": image[0] if image else None}
+            if not isinstance(image, dict) or not image.get("imageUrl"):
+                continue
+            candidates.append(item)
+
+        exact = [item for item in candidates if norm_title(item.get("l")) == target]
         if year:
-            year_matches = [item for item in candidates if str(item.get("y", "")) == str(year)]
-            if year_matches:
-                candidates = year_matches
-        exact = [
-            item for item in candidates
-            if re.sub(r'[^a-z0-9]+', '', str(item.get("l", "")).lower()) == title_key
-        ]
-        selected = exact or candidates
-        return selected[0]["i"]["imageUrl"] if selected else None
+            exact_year = [item for item in exact if str(item.get("y", "")) == str(year)]
+            if exact_year:
+                exact = exact_year
+            elif exact:
+                logger.warning("IMDb suggestion title year mismatch for %s (%s)", title, year)
+                return None
+
+        if exact:
+            chosen = exact[0]
+        else:
+            scored = sorted(
+                ((difflib.SequenceMatcher(None, target, norm_title(item.get("l"))).ratio(), item)
+                 for item in candidates),
+                key=lambda pair: pair[0],
+                reverse=True
+            )
+            if not scored or scored[0][0] < 0.90:
+                logger.warning("IMDb suggestion has no confident exact-title match for %r", title)
+                return None
+            score, chosen = scored[0]
+            if year and str(chosen.get("y", "")) != str(year):
+                logger.warning("IMDb suggestion close match has wrong year for %r", title)
+                return None
+            logger.info("IMDb suggestion accepted close match %r (%.2f)", chosen.get("l"), score)
+
+        image_url = chosen["i"]["imageUrl"]
+        # IMDb image CDN accepts the V1 original-size form; avoid the tiny
+        # autocomplete thumbnail when the original asset is available.
+        image_url = re.sub(r"\._V1_[^./]*(?:_[^./]*)*(?=\.(?:jpg|jpeg|png|webp)(?:$|\?))", "._V1_", image_url, flags=re.I)
+        logger.info("IMDb poster matched %r (%s)", chosen.get("l"), chosen.get("id"))
+        return image_url
     except Exception as e:
         logger.warning("IMDb suggestion poster lookup failed for %r: %s", query, e)
         return None
-
 
 async def get_movie_details(query, id=False, file=None):
     """IMDb metadata lookup; always try IMDb's own suggestion service for artwork."""
