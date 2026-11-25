@@ -90,8 +90,14 @@ async def is_subscribed(bot, user_id, fsub_channels):
     btn = []
     
     async def check_channel(channel_id):
+        # A pending join request is sufficient; join_req.py records it in MongoDB.
         try:
-            # No need to get chat object separately
+            if await db.has_joined_channel(user_id, channel_id):
+                return None
+        except Exception as e:
+            logger.warning(f"Pending join-request lookup failed for {channel_id}: {e}")
+        try:
+            # A current channel member also passes verification.
             await bot.get_chat_member(channel_id, user_id)
         except UserNotParticipant:
             try:
