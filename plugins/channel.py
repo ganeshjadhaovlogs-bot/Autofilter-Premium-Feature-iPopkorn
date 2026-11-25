@@ -851,12 +851,17 @@ async def refresh_all_movie_metadata(bot, message):
                 else:
                     genres = "N/A"
 
+                online_languages = details.get("languages") or []
+                if isinstance(online_languages, (list, tuple, set)):
+                    online_languages = ", ".join(str(item) for item in online_languages if item)
                 updates = {
                     "title": details.get("title") or base_name,
                     "genres": genres or "N/A",
                     "rating": details.get("rating") or "N/A",
                     "runtime": details.get("runtime") or "N/A",
                     "year": details.get("year") or movie_doc.get("year"),
+                    "ott_platform": tmdb_details.get("ott_platform") or movie_doc.get("ott_platform") or "N/A",
+                    "online_languages": online_languages or movie_doc.get("online_languages") or "N/A",
                     "poster_url": poster_url,
                     "backup_poster_url": tmdb_poster if poster_url and poster_url != tmdb_poster else None,
                     "imdb_url": imdb_details.get("url") or movie_doc.get("imdb_url") or (
