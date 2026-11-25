@@ -611,16 +611,8 @@ async def update_movie_message(bot, base_name):
                     {"_id": base_name},
                     {"$set": {"message_id": new_msg.id, "is_photo": True}}
                 )
-                try:
-                    await bot.delete_messages(
-                        chat_id=MOVIE_UPDATE_CHANNEL,
-                        message_ids=message_id
-                    )
-                except Exception:
-                    logger.warning(
-                        "New poster post created for %s, but old text post %s could not be removed.",
-                        base_name, message_id
-                    )
+                # Keep the old text-only announcement in channel history.
+                # The database now points to the new photo announcement.
             return
         except MessageNotModified:
             return
