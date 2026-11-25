@@ -57,24 +57,14 @@ class temp(object):
     TEMP_INVITE_LINKS = {}
 
 async def _has_live_join_request(bot, channel_id, user_id):
-    """Check the join-request update recorded by the bot.
+    """Return True only for a recently recorded join request.
 
-    Pyrogram's get_chat_join_requests method is user-account-only, so a bot
-    cannot use it to list Telegram's pending requests. The chat_join_request
-    handler records requests in the database; use that record for Try Again.
+    Telegram Bot API does not expose a method for listing a user's pending
+    join requests or notify bots when an admin declines one. Records therefore
+    expire after 7 days; a fresh request refreshes the timestamp.
     """
     try:
-        has_request = await db.has_joined_channel(user_id, channel_id)
-        if has_request:
-            logger.info(
-                f"Pending join request record found: user={user_id}, channel={channel_id}"
-            )
-            return True
-
-        logger.info(
-            f"No recorded join request: user={user_id}, channel={channel_id}"
-        )
-        return False
+        return bool(await db.has_joined_channel(user_id, channel_id))
     except Exception as e:
         logger.warning(
             f"Could not check recorded join request for user {user_id} "
@@ -83,70 +73,67 @@ async def _has_live_join_request(bot, channel_id, user_id):
         return False
 
 
+async def _required_channel_button(bot, user_id, channel_id):
+    """Return None when member/pending-request access is valid; otherwise a join button."""
+    try:
+        member = await bot.get_chat_member(int(channel_id), int(user_id))
+        status = member.status
+        is_member = (
+            status in (
+                enums.ChatMemberStatus.MEMBER,
+                enums.ChatMemberStatus.ADMINISTRATOR,
+                enums.ChatMemberStatus.OWNER,
+            )
+            or (
+                status == enums.ChatMemberStatus.RESTRICTED
+                and bool(getattr(member, "is_member", False))
+            )
+        )
+        if is_member:
+            await db.remove_join_req(user_id, channel_id)
+            return None
+    except UserNotParticipant:
+        pass
+    except Exception as e:
+        logger.error(f"Membership lookup failed for user {user_id} in {channel_id}: {e}")
+
+    # A request is treated as access until its 7-day record expires.
+    if await _has_live_join_request(bot, channel_id, user_id):
+        return None
+
+    try:
+        chat = await bot.get_chat(int(channel_id))
+        invite = await bot.create_chat_invite_link(
+            int(channel_id), creates_join_request=True
+        )
+        return InlineKeyboardButton(
+            f"📨 Request to Join {chat.title}",
+            url=invite.invite_link
+        )
+    except Exception as e:
+        logger.warning(f"Could not create join-request invite for {channel_id}: {e}")
+        # Fail closed: never deliver a file when channel access could not be verified.
+        return InlineKeyboardButton(
+            "⚠️ Channel check unavailable — try again",
+            callback_data="fsub_retry"
+        )
+
+
 async def is_req_subscribed(bot, user_id, rqfsub_channels):
-    btn = []
-    for ch_id in rqfsub_channels:
-        try:
-            member = await bot.get_chat_member(ch_id, user_id)
-            if member.status not in (enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED):
-                await db.remove_join_req(user_id, ch_id)
-                continue
-        except UserNotParticipant:
-            pass
-        except Exception as e:
-            logger.error(f"Error checking membership in {ch_id}: {e}")
-
-        if await _has_live_join_request(bot, ch_id, user_id):
-            continue
-
-        try:
-            chat = await bot.get_chat(ch_id)
-            invite = await bot.create_chat_invite_link(ch_id, creates_join_request=True)
-            btn.append([InlineKeyboardButton(
-                f"📨 Request to Join {chat.title}", url=invite.invite_link
-            )])
-        except Exception as e:
-            logger.warning(f"Invite link error for {ch_id}: {e}")
-    return btn
+    channels = list(dict.fromkeys(rqfsub_channels or []))
+    results = await asyncio.gather(
+        *(_required_channel_button(bot, user_id, ch_id) for ch_id in channels)
+    )
+    return [[button] for button in results if button]
 
 
 async def is_subscribed(bot, user_id, fsub_channels):
-    btn = []
-
-    async def check_channel(channel_id):
-        try:
-            member = await bot.get_chat_member(channel_id, user_id)
-            if member.status not in (enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED):
-                await db.remove_join_req(user_id, channel_id)
-                return None
-        except UserNotParticipant:
-            pass
-        except Exception as e:
-            logger.error(f"Membership lookup failed for {channel_id}: {e}")
-
-        if await _has_live_join_request(bot, channel_id, user_id):
-            return None
-
-        try:
-            chat = await bot.get_chat(int(channel_id))
-            invite_link = await bot.create_chat_invite_link(
-                channel_id, creates_join_request=True
-            )
-            return InlineKeyboardButton(
-                f"📨 Request to Join {chat.title}",
-                url=invite_link.invite_link
-            )
-        except Exception as e:
-            logger.warning(f"Failed to create join-request invite for {channel_id}: {e}")
-        return None
-
+    channels = list(dict.fromkeys(fsub_channels or []))
     results = await asyncio.gather(
-        *(check_channel(channel_id) for channel_id in fsub_channels)
+        *(_required_channel_button(bot, user_id, ch_id) for ch_id in channels)
     )
-    for button in results:
-        if button:
-            btn.append([button])
-    return btn
+    return [[button] for button in results if button]
+
 
 async def is_check_admin(bot, chat_id, user_id):
     try:
