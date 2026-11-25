@@ -5,6 +5,7 @@
 import re
 import logging
 import asyncio
+import aiohttp
 from datetime import datetime
 from collections import defaultdict
 from io import BytesIO
@@ -12,7 +13,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from plugins.Roaroicfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
-from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS
+from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS, BOT_TOKEN
 from Script import script
 from database.ia_filterdb import save_file
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
@@ -483,6 +484,44 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 # applied by editing that same post below.
         schedule_update(bot, base_name)
 
+async def set_red_get_files_button(message_id, base_name):
+    """Apply Telegram Bot API 9.4 red styling without relying on Pyrofork's button model."""
+    if not BOT_TOKEN or not message_id:
+        logger.warning("Cannot apply red GET FILES button style: BOT_TOKEN/message_id missing.")
+        return False
+
+    reply_markup = {
+        "inline_keyboard": [[{
+            "text": "ɢᴇᴛ ғɪʟᴇs",
+            "url": f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}",
+            "style": "danger"
+        }]]
+    }
+    api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageReplyMarkup"
+    try:
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                api_url,
+                json={
+                    "chat_id": MOVIE_UPDATE_CHANNEL,
+                    "message_id": message_id,
+                    "reply_markup": reply_markup
+                }
+            ) as response:
+                result = await response.json(content_type=None)
+                if response.status == 200 and result.get("ok"):
+                    logger.info("Red GET FILES button applied to announcement %s", message_id)
+                    return True
+                logger.warning(
+                    "Telegram rejected red GET FILES button for %s: HTTP %s - %s",
+                    message_id, response.status, result
+                )
+    except Exception:
+        logger.exception("Could not apply red GET FILES button to announcement %s", message_id)
+    return False
+
+
 async def send_movie_update(bot, base_name):
     max_retries = 3
     base_delay = 5
@@ -496,8 +535,7 @@ async def send_movie_update(bot, base_name):
             buttons = InlineKeyboardMarkup([[
                 InlineKeyboardButton(
                     'ɢᴇᴛ ғɪʟᴇs',
-                    url=f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}",
-                    style=enums.ButtonStyle.DANGER
+                    url=f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}"
                 )
             ]])
 
@@ -550,6 +588,7 @@ async def send_movie_update(bot, base_name):
                 {"_id": base_name},
                 {"$set": {"message_id": msg.id, "is_photo": is_photo}}
             )
+            await set_red_get_files_button(msg.id, base_name)
             return msg
         except FloodWait as e:
             wait_time = e.value + 2
@@ -569,8 +608,7 @@ async def update_movie_message(bot, base_name):
         buttons = InlineKeyboardMarkup([[
             InlineKeyboardButton(
                 'ɢᴇᴛ ғɪʟᴇs',
-                url=f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}",
-                style=enums.ButtonStyle.DANGER
+                url=f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}"
             )
         ]])
 
@@ -614,6 +652,7 @@ async def update_movie_message(bot, base_name):
                     media=media,
                     reply_markup=buttons
                 )
+                await set_red_get_files_button(message_id, base_name)
             else:
                 # Telegram cannot turn a text message into a photo by editing it.
                 # Upgrade legacy text-only announcements by sending the photo first,
@@ -646,10 +685,12 @@ async def update_movie_message(bot, base_name):
                     {"_id": base_name},
                     {"$set": {"message_id": new_msg.id, "is_photo": True}}
                 )
+                await set_red_get_files_button(new_msg.id, base_name)
                 # Keep the old text-only announcement in channel history.
                 # The database now points to the new photo announcement.
             return
         except MessageNotModified:
+            await set_red_get_files_button(message_id, base_name)
             return
         except MessageIdInvalid:
             logger.warning(
