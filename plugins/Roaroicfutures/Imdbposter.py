@@ -148,9 +148,60 @@ def _get_movie_details_sync(query, id=False, file=None):
 
 
 async def _get_imdb_suggestion_poster(query, year=None):
-    """Get the poster image URL from IMDb's public title-suggestion response."""
+    """Get a poster image URL from IMDb's public title-suggestion response."""
     try:
-        title = re.sub(r'\\s*\\(?[12]\\d{3}\\)?
+        title = re.sub(r'\s*\(?[12]\d{3}\)?$', '', str(query or '')).strip()
+        if not title:
+            return None
+        url = f"https://v2.sg.media-imdb.com/suggestion/x/{quote(title, safe='')}.json"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+            "Accept": "application/json,text/plain,*/*",
+            "Referer": "https://www.imdb.com/"
+        }
+        timeout = aiohttp.ClientTimeout(total=12, connect=6)
+        async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    logger.warning("IMDb suggestion lookup returned HTTP %s for %s", response.status, title)
+                    return None
+                payload = await response.json(content_type=None)
+
+        items = payload.get("d", []) if isinstance(payload, dict) else []
+        title_key = re.sub(r'[^a-z0-9]+', '', title.lower())
+        candidates = [
+            item for item in items
+            if str(item.get("id", "")).startswith("tt") and item.get("i", {}).get("imageUrl")
+        ]
+        if year:
+            year_matches = [item for item in candidates if str(item.get("y", "")) == str(year)]
+            if year_matches:
+                candidates = year_matches
+        exact = [
+            item for item in candidates
+            if re.sub(r'[^a-z0-9]+', '', str(item.get("l", "")).lower()) == title_key
+        ]
+        selected = exact or candidates
+        return selected[0]["i"]["imageUrl"] if selected else None
+    except Exception as e:
+        logger.warning("IMDb suggestion poster lookup failed for %r: %s", query, e)
+        return None
+
+
+async def get_movie_details(query, id=False, file=None):
+    """Async IMDb lookup with an additional IMDb-native poster lookup."""
+    import asyncio
+    details = await asyncio.to_thread(_get_movie_details_sync, query, id, file)
+    if not details:
+        return details
+    poster = await _get_imdb_suggestion_poster(
+        details.get("title") or query,
+        details.get("year")
+    )
+    if poster:
+        details["poster_url"] = poster
+    return details
+
 
 TMDB_API = "https://api.themoviedb.org/3"
 TMDB_IMG = "https://image.tmdb.org/t/p"
