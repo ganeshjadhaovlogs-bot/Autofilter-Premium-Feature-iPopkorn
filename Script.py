@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────
-# Powered by Roaroic | Developer Channel: @
-# https://t.me/+gLBpbDa_b5JkMGQ1
+# Powered by Roaroic | Developer Channel: @FilmsChor
+# https://t.me/FilmsChor
 # ─────────────────────────────────────────────
 class script(object):
     START_TXT = """<b>👋 ʜᴇʏ {}, {}</b>
@@ -230,7 +230,7 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 ⏱️ ʀᴜɴᴛɪᴍᴇ  : <b>{runtime}</b>
 🎬 ǫᴜᴀʟɪᴛʏ  : <b>{quality}</b>
 🔉 ᴀᴜᴅɪᴏ     : <b>{language}</b>
-🌟 ʀᴀᴛɪɴɢ     : <b>{rating}</b>                     
+🌟 ʀᴀᴛɪɴɢ     : <b>{rating}</b>                    
 {episodes}</blockquote>─┉─•✦•─┉─
 
 <b>🔍 Sᴇᴀʀᴄʜ → {search_link} 🔍</b>
