@@ -202,7 +202,7 @@ def schedule_update(bot, base_name, delay=5):
     loop = asyncio.get_event_loop()
     pending_updates[base_name] = loop.call_later(
         delay,
-        lambda: asyncio.create_task(update_movie_message(bot, base_name))
+        lambda: asyncio.create_task(update_movie_message(bot, base_name, replace_post=True))
     )
 
 def extract_media_info(filename: str, caption: str):
@@ -659,7 +659,7 @@ async def send_movie_update(bot, base_name):
             break
     return None
 
-async def update_movie_message(bot, base_name):
+async def update_movie_message(bot, base_name, replace_post=False):
     try:
         movie_doc = await db.movie_updates.find_one({"_id": base_name})
         if not movie_doc:
@@ -677,6 +677,38 @@ async def update_movie_message(bot, base_name):
         is_photo = movie_doc.get("is_photo", False)
 
         if not message_id:
+            await send_movie_update(bot, base_name)
+            return
+
+        # For a newly uploaded quality/file, replace the old channel announcement
+        # with a fresh post containing the complete accumulated file list.
+        if replace_post:
+            try:
+                await bot.delete_messages(
+                    chat_id=MOVIE_UPDATE_CHANNEL,
+                    message_ids=message_id
+                )
+                logger.info(
+                    "Deleted previous announcement %s for %s before reposting.",
+                    message_id, base_name
+                )
+            except MessageIdInvalid:
+                logger.warning(
+                    "Previous announcement %s for %s was already unavailable; reposting.",
+                    message_id, base_name
+                )
+            except Exception:
+                logger.exception(
+                    "Could not delete previous announcement %s for %s; "
+                    "keeping it and skipping replacement to avoid duplicates.",
+                    message_id, base_name
+                )
+                return
+
+            await db.movie_updates.update_one(
+                {"_id": base_name},
+                {"$set": {"message_id": None, "is_photo": False}}
+            )
             await send_movie_update(bot, base_name)
             return
 
