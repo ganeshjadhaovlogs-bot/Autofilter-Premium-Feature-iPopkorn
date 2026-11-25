@@ -53,24 +53,23 @@ async def fetch_image(url, size=(860, 1200)):
                     logger.error("Poster URL returned an empty response: %s", url[:180])
                     return None
 
-                # Preserve the full source poster. Portrait IMDb posters were
-                # previously center-cropped into 16:9, cutting off artwork and text.
+                # Always use the requested poster-card layout: a blurred, enlarged
+                # copy fills the 16:9 canvas while the complete original artwork
+                # stays centered and uncropped in the foreground (like the reference).
                 source = Image.open(BytesIO(data)).convert("RGB")
                 target_w, target_h = size
-                if source.width / max(source.height, 1) > 1.45:
-                    img = ImageOps.fit(source, size, method=Image.Resampling.LANCZOS)
-                else:
-                    background = ImageOps.fit(source, size, method=Image.Resampling.LANCZOS)
-                    background = background.filter(ImageFilter.GaussianBlur(radius=24))
-                    foreground = ImageOps.contain(
-                        source,
-                        (int(target_w * 0.62), int(target_h * 0.92)),
-                        method=Image.Resampling.LANCZOS
-                    )
-                    x = (target_w - foreground.width) // 2
-                    y = (target_h - foreground.height) // 2
-                    background.paste(foreground, (x, y))
-                    img = background
+                background = ImageOps.fit(
+                    source, size, method=Image.Resampling.LANCZOS
+                ).filter(ImageFilter.GaussianBlur(radius=24))
+                foreground = ImageOps.contain(
+                    source,
+                    (int(target_w * 0.62), int(target_h * 0.92)),
+                    method=Image.Resampling.LANCZOS
+                )
+                x = (target_w - foreground.width) // 2
+                y = (target_h - foreground.height) // 2
+                background.paste(foreground, (x, y))
+                img = background
                 out = BytesIO()
                 img.save(out, format="JPEG", quality=96, subsampling=0)
                 out.seek(0)
