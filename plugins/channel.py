@@ -362,6 +362,15 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             imdb_details = await get_movie_details(base_name) or {}
             # Retry both providers for old database records missing poster/details.
             tmdb_details = await get_movie_detailsx(base_name) or {}
+            if not isinstance(imdb_details, dict):
+                imdb_details = {}
+            if not isinstance(tmdb_details, dict) or tmdb_details.get("error"):
+                logger.warning(
+                    "TMDB metadata unavailable while repairing %s: %s",
+                    base_name,
+                    tmdb_details.get("error") if isinstance(tmdb_details, dict) else "invalid response"
+                )
+                tmdb_details = {}
 
             tmdb_poster = (
                 tmdb_details.get("backdrop_url")
@@ -825,6 +834,18 @@ async def refresh_all_movie_metadata(bot, message):
             try:
                 imdb_details = await get_movie_details(base_name) or {}
                 tmdb_details = await get_movie_detailsx(base_name) or {}
+
+                # Provider errors are diagnostic dictionaries, not movie metadata.
+                # Never let {"error": "..."} become the selected metadata object.
+                if not isinstance(imdb_details, dict):
+                    imdb_details = {}
+                if not isinstance(tmdb_details, dict) or tmdb_details.get("error"):
+                    logger.warning(
+                        "TMDB metadata unavailable for %s: %s",
+                        base_name,
+                        tmdb_details.get("error") if isinstance(tmdb_details, dict) else "invalid response"
+                    )
+                    tmdb_details = {}
 
                 # Stop before writing/posting this movie if cancellation was requested
                 # while the metadata providers were being queried.
