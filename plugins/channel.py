@@ -107,9 +107,22 @@ def remove_ignored_words(text: str) -> str:
     IGNORE_WORDS_LOWER = {w.lower() for w in IGNORE_WORDS}
     return " ".join(word for word in text.split() if word.lower() not in IGNORE_WORDS_LOWER)
 
+def format_quality_label(value: str) -> str:
+    value = str(value).strip()
+    # Keep resolution notation like 1080p/480p, uppercase codec and source labels.
+    if re.fullmatch(r"\d{3,4}p", value, flags=re.IGNORECASE):
+        return value.lower()
+    return value.upper()
+
+
 def get_qualities(text: str) -> str:
     qualities = QUALITY_PATTERN.findall(text)
-    return ", ".join(qualities) if qualities else "N/A"
+    formatted = []
+    for quality in qualities:
+        label = format_quality_label(quality)
+        if label and label not in formatted:
+            formatted.append(label)
+    return ", ".join(formatted) if formatted else "N/A"
 
 def format_uploaded_duration(seconds):
     """Format the duration reported by Telegram for the actual uploaded media."""
@@ -961,7 +974,9 @@ def generate_movie_message(movie_doc, base_name):
             rating = f"{float(rating):.1f}/10"
         except (TypeError, ValueError):
             pass
-    quality_str = ", ".join(sorted(all_qualities)) if all_qualities else "N/A"
+    quality_str = ", ".join(
+        sorted(format_quality_label(quality) for quality in all_qualities)
+    ) if all_qualities else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else (
         movie_doc.get("ott_platform") or "N/A"
