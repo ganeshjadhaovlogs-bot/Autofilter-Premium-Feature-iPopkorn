@@ -25,6 +25,13 @@ async def clear_join_req_on_membership_change(client, update):
         member = update.new_chat_member
         if member and member.user:
             await db.remove_join_req(member.user.id, update.chat.id)
+            if member.status in (
+                enums.ChatMemberStatus.LEFT,
+                enums.ChatMemberStatus.BANNED,
+            ):
+                # Remove the regular user-list entry after leaving; premium data
+                # is stored separately and is deliberately preserved.
+                await db.delete_user(member.user.id)
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(
