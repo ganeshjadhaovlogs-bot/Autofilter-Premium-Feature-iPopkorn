@@ -380,13 +380,52 @@ async def get_movie_detailsx(query, id=False, file=None):
                 results = [r for r in (res or {}).get("results", []) if r.get("media_type") in ("movie", "tv")]
                 if not results:
                     return {"error": f"No TMDB result for '{q}'"}
-                chosen = results[0]
-                if year:
-                    for r in results:
-                        d = r.get("release_date") or r.get("first_air_date") or ""
-                        if d.startswith(year):
-                            chosen = r
-                            break
+                def norm_title(value):
+                    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+                target = norm_title(title)
+                ranked = []
+                for item in results:
+                    candidate_titles = [
+                        item.get("title"), item.get("name"),
+                        item.get("original_title"), item.get("original_name")
+                    ]
+                    score = max(
+                        (difflib.SequenceMatcher(None, target, norm_title(value)).ratio()
+                         for value in candidate_titles if value),
+                        default=0
+                    )
+                    date_value = item.get("release_date") or item.get("first_air_date") or ""
+                    item_year = date_value[:4] if len(date_value) >= 4 else ""
+                    ranked.append((score, item_year == str(year) if year else True, item))
+                ranked.sort(key=lambda entry: (entry[1], entry[0]), reverse=True)
+
+                exact = [
+                    entry for entry in ranked
+                    if any(norm_title(value) == target for value in (
+                        entry[2].get("title"), entry[2].get("name"),
+                        entry[2].get("original_title"), entry[2].get("original_name")
+                    ) if value)
+                ]
+                exact_year = [entry for entry in exact if entry[1]]
+                if exact_year:
+                    chosen_entry = exact_year[0]
+                elif exact:
+                    logger.warning("TMDB exact title found but year mismatch for %r (%s); refusing unrelated match", title, year)
+                    return {"error": "TMDB title year mismatch"}
+                elif ranked and ranked[0][0] >= 0.90 and ranked[0][1]:
+                    chosen_entry = ranked[0]
+                else:
+                    logger.warning("TMDB has no confident title/year match for %r", q)
+                    return {"error": "TMDB title match not confident"}
+
+                chosen = chosen_entry[2]
+                logger.info(
+                    "TMDB accepted title %r year %s for query %r",
+                    chosen.get("title") or chosen.get("name"),
+                    chosen.get("release_date") or chosen.get("first_air_date"),
+                    q
+                )
                 media_type, tmdb_id = chosen["media_type"], chosen["id"]
 
             if not tmdb_id or not media_type:
