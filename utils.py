@@ -56,12 +56,25 @@ class temp(object):
     VERIFICATIONS = {}
     TEMP_INVITE_LINKS = {}
 
+async def _has_live_join_request(bot, channel_id, user_id):
+    """Return True only while Telegram still lists this user's request as pending."""
+    try:
+        async for request in bot.get_chat_join_requests(channel_id, limit=100):
+            if getattr(getattr(request, "user", None), "id", None) == user_id:
+                await db.add_join_req(user_id, channel_id)
+                return True
+    except Exception as e:
+        logger.warning(f"Could not verify pending join request in {channel_id}: {e}")
+    await db.remove_join_req(user_id, channel_id)
+    return False
+
+
 async def is_req_subscribed(bot, user_id, rqfsub_channels):
     btn = []
     for ch_id in rqfsub_channels:
         try:
             member = await bot.get_chat_member(ch_id, user_id)
-            if member.status != enums.ChatMemberStatus.BANNED:
+            if member.status not in (enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED):
                 await db.remove_join_req(user_id, ch_id)
                 continue
         except UserNotParticipant:
@@ -69,26 +82,17 @@ async def is_req_subscribed(bot, user_id, rqfsub_channels):
         except Exception as e:
             logger.error(f"Error checking membership in {ch_id}: {e}")
 
-        # The chat_join_request update stores a pending request in our DB.
-        # A pending request must grant file access immediately; do not wait
-        # for an administrator to approve it.
-        try:
-            if await db.has_joined_channel(user_id, ch_id):
-                continue
-        except Exception as e:
-            logger.warning(f"Could not read pending request record for {ch_id}: {e}")
+        if await _has_live_join_request(bot, ch_id, user_id):
+            continue
 
         try:
             chat = await bot.get_chat(ch_id)
-            invite = await bot.create_chat_invite_link(
-                ch_id, creates_join_request=True
-            )
+            invite = await bot.create_chat_invite_link(ch_id, creates_join_request=True)
             btn.append([InlineKeyboardButton(
                 f"📨 Request to Join {chat.title}", url=invite.invite_link
             )])
         except Exception as e:
             logger.warning(f"Invite link error for {ch_id}: {e}")
-
     return btn
 
 
@@ -98,7 +102,7 @@ async def is_subscribed(bot, user_id, fsub_channels):
     async def check_channel(channel_id):
         try:
             member = await bot.get_chat_member(channel_id, user_id)
-            if member.status != enums.ChatMemberStatus.BANNED:
+            if member.status not in (enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED):
                 await db.remove_join_req(user_id, channel_id)
                 return None
         except UserNotParticipant:
@@ -106,13 +110,8 @@ async def is_subscribed(bot, user_id, fsub_channels):
         except Exception as e:
             logger.error(f"Membership lookup failed for {channel_id}: {e}")
 
-        # A recorded join request is pending until Telegram reports the user
-        # as a member. Grant access immediately without waiting for approval.
-        try:
-            if await db.has_joined_channel(user_id, channel_id):
-                return None
-        except Exception as e:
-            logger.warning(f"Could not read pending request record for {channel_id}: {e}")
+        if await _has_live_join_request(bot, channel_id, user_id):
+            return None
 
         try:
             chat = await bot.get_chat(int(channel_id))
@@ -127,13 +126,12 @@ async def is_subscribed(bot, user_id, fsub_channels):
             logger.warning(f"Failed to create join-request invite for {channel_id}: {e}")
         return None
 
-    tasks = [check_channel(channel_id) for channel_id in fsub_channels]
-    results = await asyncio.gather(*tasks)
-
+    results = await asyncio.gather(
+        *(check_channel(channel_id) for channel_id in fsub_channels)
+    )
     for button in results:
         if button:
             btn.append([button])
-
     return btn
 
 async def is_check_admin(bot, chat_id, user_id):
