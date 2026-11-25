@@ -216,25 +216,25 @@ Nᴀᴍᴇ : {}
 
 Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
     
-    CAPTION = """<b><a href="https://t.me/+5QNRX0xVXeA2NmM1">{file_name}</a></b>
-    <blockquote> <b>🎧 ᴜsᴇ ᴠʟᴄ ᴘʟᴀʏᴇʀ ꜰᴏʀ ᴀᴜᴅɪᴏ ɪssᴜᴇs</b>\n<b>ᴘʟᴢ ғᴏʀᴡᴀʀᴅ ᴛʜɪꜱ ғɪʟᴇ ᴛᴏ ᴛʜᴇ ꜱᴀᴠᴇᴅ ᴍᴇꜱꜱᴀɢᴇ ᴀɴᴅ ᴄʟᴏꜱᴇ.</b></blockquote>\n<b>✨ Powered By : <a href="https://t.me/+gLBpbDa_b5JkMGQ1">[ Movie Group ]</a></b>"""
+    CAPTION = """<b><a href="https://t.me/+xvBGsY_bn2s3NjA9">{file_name}</a></b>
+    <blockquote> <b>🎧 ᴜsᴇ ᴠʟᴄ ᴘʟᴀʏᴇʀ ꜰᴏʀ ᴀᴜᴅɪᴏ ɪssᴜᴇs</b>\n<b>ᴘʟᴢ ғᴏʀᴡᴀʀᴅ ᴛʜɪꜱ ғɪʟᴇ ᴛᴏ ᴛʜᴇ ꜱᴀᴠᴇᴅ ᴍᴇꜱꜱᴀɢᴇ ᴀɴᴅ ᴄʟᴏꜱᴇ.</b></blockquote>\n<b>✨ Powered By : <a href="https://t.me/FilmsChor">[ FilmsChor ]</a></b>"""
 
     
     MOVIE_UPDATE_NOTIFY_TXT = """
 <a href="{poster_url}">📥</a> <a href="{imdb_url}">New {tag} Added</a>
 
 🎬 ᴛɪᴛʟᴇ : <b><code>{filename}</code></b>
-
+─┉─•✦•─┉─
 <blockquote>🎭 ɢᴇɴʀᴇs : <b>{genres}</b>
 📺 ᴏᴛᴛ        : <b>{ott}</b>
 🎞️ ǫᴜᴀʟɪᴛʏ : <b>{quality}</b>
 🎧 ᴀᴜᴅɪᴏ    : <b>{language}</b>
-🔥 ʀᴀᴛɪɴɢ   : <b>{rating}</b>
+🔥 ʀᴀᴛɪɴɢ   : <b>{rating}</b>                     
 {episodes}
-</blockquote>
+</blockquote>─┉─•✦•─┉─
 
 
-🔍 <b>Sᴇᴀʀᴄʜ →</b> {search_link}
+🔍 <b>Sᴇᴀʀᴄʜ →</b> {search_link} 🔍
 """
 
 
@@ -258,7 +258,7 @@ sʜᴏᴡɴ ɪɴ : {remaining_seconds} <i>sᴇᴄ</i>⚡️
     𝙱𝙾𝚃 𝚆𝙾𝚁𝙺𝙸𝙽𝙶 𝙿𝚁𝙾𝙿𝙴𝚁𝙻𝚈....
 
     Powered by Roaroic | Developer Channel: @
-    ᴊᴏɪɴ : 'https://t.me/+gLBpbDa_b5JkMGQ1'
+    ᴊᴏɪɴ : 'https://t.me/FilmsChor'
     """
 
 
