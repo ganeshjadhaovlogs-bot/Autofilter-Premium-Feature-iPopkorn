@@ -262,14 +262,26 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     }
 
     if not movie_doc:
+        # IMDb is the primary source for title details and artwork.
+        imdb_details = await get_movie_details(base_name) or {}
+        tmdb_details = {}
         if TMDB_POSTER:
-            details = await get_movie_detailsx(base_name) or {"error": "empty"}
-            if details.get("error") or not (details.get("poster_url") or details.get("backdrop_url")):
-                error_tmdb=True
-                logger.info(f"TMDB failed/no poster ({details.get('error')}), switching to IMDB")
-                details = await get_movie_details(base_name) or {}
-        else:
-            details = await get_movie_details(base_name) or {}
+            tmdb_details = await get_movie_detailsx(base_name) or {}
+
+        # Keep IMDb values whenever available; use TMDB only to fill gaps.
+        details = dict(tmdb_details)
+        for key, value in imdb_details.items():
+            if value not in (None, "", [], "N/A"):
+                details[key] = value
+
+        imdb_poster = imdb_details.get("poster_url")
+        tmdb_poster = (
+            tmdb_details.get("backdrop_url")
+            if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
+            else tmdb_details.get("poster_url")
+        )
+        poster_url = imdb_poster or tmdb_poster
+        backup_poster_url = tmdb_poster if imdb_poster else None
 
         raw_genres = details.get("genres", "N/A")
         if isinstance(raw_genres, str):
@@ -277,16 +289,22 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
         else:
             genres = ", ".join(g for g in raw_genres if g in STANDARD_GENRES) or "N/A"
+
         movie_doc = {
             "_id": base_name,
             "files": [file_data],
-            "poster_url": (details.get("backdrop_url") or details.get("poster_url")) if LANDSCAPE_POSTER and TMDB_POSTER and not error_tmdb else details.get("poster_url"),
-            "is_landscape": bool(LANDSCAPE_POSTER and TMDB_POSTER and not error_tmdb and details.get("backdrop_url")),
+            "poster_url": poster_url,
+            "backup_poster_url": backup_poster_url,
+            "is_landscape": True,
             "genres": genres,
             "rating": details.get("rating") or "N/A",
             "runtime": details.get("runtime") or "N/A",
-            "imdb_url": (details.get("tmdb_url") if TMDB_POSTER and not error_tmdb else details.get("url")) or "",
-            "year": media_info["year"] or details.get("year"),
+            "imdb_url": imdb_details.get("url") or (
+                f"https://www.imdb.com/title/{imdb_details.get('imdb_id')}"
+                if imdb_details.get("imdb_id") else
+                details.get("tmdb_url") or ""
+            ),
+            "year": media_info["year"] or imdb_details.get("year") or tmdb_details.get("year"),
             "tag": media_info["tag"],
             "ott_platform": media_info["ott_platform"],
             "message_id": None,
@@ -335,13 +353,22 @@ async def send_movie_update(bot, base_name):
             ]])
 
             resized_poster = None
-            if movie_doc.get("poster_url"):
+            # Try the IMDb image first, then TMDB artwork if the IMDb URL fails.
+            poster_urls = [
+                movie_doc.get("poster_url"),
+                movie_doc.get("backup_poster_url")
+            ]
+            for poster_url in poster_urls:
+                if not poster_url:
+                    continue
                 resized_poster = await fetch_image(
-                    movie_doc["poster_url"],
+                    poster_url,
                     size=(1280, 720)
                 )
-            # Enforce an exact 16:9 landscape image for every channel post.
-            # Center-crop portrait or square TMDB/IMDb artwork when necessary.
+                if resized_poster:
+                    break
+
+            # fetch_image already returns 16:9; normalize once more for safety.
             if resized_poster:
                 source_image = Image.open(resized_poster).convert("RGB")
                 landscape_image = ImageOps.fit(
@@ -355,6 +382,7 @@ async def send_movie_update(bot, base_name):
                 output.name = "movie_landscape.jpg"
                 resized_poster = output
             else:
+                logger.warning("IMDb/TMDB poster unavailable for '%s'; using branded fallback.", base_name)
                 resized_poster = generate_fallback_poster(movie_doc, base_name)
 
             msg = await bot.send_photo(
