@@ -57,24 +57,33 @@ class temp(object):
     TEMP_INVITE_LINKS = {}
 
 async def _has_live_join_request(bot, channel_id, user_id):
-    """Check Telegram's live pending requests for this exact user."""
+    """Check Telegram's current pending join-request list for this exact user."""
     try:
-        # Pyrogram's get_chat_join_requests does not support offset_request.
-        # Iterate its generator directly; the previous unsupported argument
-        # raised an exception and made every pending request look invalid.
-        async for request in bot.get_chat_join_requests(channel_id):
-            if getattr(getattr(request, "user", None), "id", None) == user_id:
+        # Explicitly request a recent page. Telegram returns newest pending
+        # requests first, so a newly submitted request is included here.
+        async for request in bot.get_chat_join_requests(channel_id, limit=100):
+            request_user = getattr(request, "user", None)
+            if request_user and request_user.id == user_id:
                 await db.add_join_req(user_id, channel_id)
+                logger.info(
+                    f"Pending join request confirmed: user={user_id}, channel={channel_id}"
+                )
                 return True
 
     except Exception as e:
-        logger.warning(f"Could not verify pending join request in {channel_id}: {e}")
-        # Never grant access from an old DB record if Telegram cannot confirm it.
+        logger.warning(
+            f"Could not verify pending join request for user {user_id} "
+            f"in channel {channel_id}: {e}"
+        )
+        # Do not grant access from a stale database record.
         await db.remove_join_req(user_id, channel_id)
         return False
 
-    # No live pending request exists. Remove any stale request record.
+    # Telegram has no pending request for this user; clear stale cached data.
     await db.remove_join_req(user_id, channel_id)
+    logger.info(
+        f"No pending join request: user={user_id}, channel={channel_id}"
+    )
     return False
 
 
