@@ -8,7 +8,7 @@ import asyncio
 from datetime import datetime
 from collections import defaultdict
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from plugins.Roaroicfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
@@ -338,11 +338,23 @@ async def send_movie_update(bot, base_name):
             if movie_doc.get("poster_url"):
                 resized_poster = await fetch_image(
                     movie_doc["poster_url"],
-                    size=(853, 1280)
+                    size=(1280, 720)
                 )
-            # Every update post must contain an image. If TMDB/IMDb has no usable
-            # poster (or image fetching fails), create a branded poster locally.
-            if not resized_poster:
+            # Enforce an exact 16:9 landscape image for every channel post.
+            # Center-crop portrait or square TMDB/IMDb artwork when necessary.
+            if resized_poster:
+                source_image = Image.open(resized_poster).convert("RGB")
+                landscape_image = ImageOps.fit(
+                    source_image, (1280, 720),
+                    method=Image.Resampling.LANCZOS,
+                    centering=(0.5, 0.5)
+                )
+                output = BytesIO()
+                landscape_image.save(output, format="JPEG", quality=92)
+                output.seek(0)
+                output.name = "movie_landscape.jpg"
+                resized_poster = output
+            else:
                 resized_poster = generate_fallback_poster(movie_doc, base_name)
 
             msg = await bot.send_photo(
@@ -429,7 +441,7 @@ async def update_movie_message(bot, base_name):
 
 def generate_fallback_poster(movie_doc, base_name):
     """Create a branded poster when TMDB/IMDb has no usable artwork."""
-    width, height = 853, 1280
+    width, height = 1280, 720
     image = Image.new("RGB", (width, height))
     draw = ImageDraw.Draw(image)
 
@@ -447,15 +459,15 @@ def generate_fallback_poster(movie_doc, base_name):
 
     try:
         font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        small_font = ImageFont.truetype(font_path, 30)
-        title_font = ImageFont.truetype(font_path, 66)
-        footer_font = ImageFont.truetype(font_path, 28)
+        small_font = ImageFont.truetype(font_path, 28)
+        title_font = ImageFont.truetype(font_path, 58)
+        footer_font = ImageFont.truetype(font_path, 26)
     except Exception:
         small_font = title_font = footer_font = ImageFont.load_default()
 
     is_series = any(f.get("tag") == "#SERIES" for f in movie_doc.get("files", []))
     label = "NEW SERIES" if is_series else "NEW MOVIE"
-    draw.text((width // 2, 270), label, font=small_font, fill=(230, 205, 255), anchor="mm")
+    draw.text((width // 2, 145), label, font=small_font, fill=(230, 205, 255), anchor="mm")
 
     title = str(base_name or "Untitled").strip()
     words = title.split()
@@ -477,7 +489,7 @@ def generate_fallback_poster(movie_doc, base_name):
         lines = lines[:5]
         lines[-1] = lines[-1][:24] + "…"
 
-    line_height = 88
+    line_height = 76
     y = height // 2 - (len(lines) * line_height) // 2
     for title_line in lines:
         draw.text((width // 2, y), title_line, font=title_font,
@@ -485,8 +497,8 @@ def generate_fallback_poster(movie_doc, base_name):
                   stroke_fill=(30, 20, 45))
         y += line_height
 
-    draw.line((180, 940, width - 180, 940), fill=(170, 145, 205), width=3)
-    draw.text((width // 2, 1000), "FILMS CHOR", font=footer_font,
+    draw.line((300, 555, width - 300, 555), fill=(170, 145, 205), width=3)
+    draw.text((width // 2, 615), "FILMS CHOR", font=footer_font,
               fill=(230, 205, 255), anchor="mm")
     output = BytesIO()
     image.save(output, format="JPEG", quality=92)
