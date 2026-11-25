@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from plugins.Roaroicfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
-from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER
+from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS
 from Script import script
 from database.ia_filterdb import save_file
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -756,4 +756,93 @@ def generate_movie_message(movie_doc, base_name):
         episodes=epi_block,
         rating=movie_doc.get("rating", "N/A"),
         search_link=temp.B_LINK
+    )
+
+
+@Client.on_message(filters.command("refreshmovies") & filters.user(ADMINS))
+async def refresh_all_movie_metadata(bot, message):
+    """Admin utility: re-fetch IMDb/TMDB details and refresh existing channel posts."""
+    status = await message.reply_text(
+        "<b>🔄 IMDb/TMDB se purani movies ki details aur posters refresh ho rahe hain...</b>"
+    )
+    if not hasattr(db, "movie_updates"):
+        db.movie_updates = db.db.movie_updates
+
+    checked = updated = posted = 0
+    async for movie_doc in db.movie_updates.find({}):
+        base_name = movie_doc.get("_id")
+        if not base_name:
+            continue
+        checked += 1
+        try:
+            imdb_details = await get_movie_details(base_name) or {}
+            tmdb_details = await get_movie_detailsx(base_name) or {}
+            details = dict(tmdb_details)
+            for key, value in imdb_details.items():
+                if value not in (None, "", [], "N/A"):
+                    details[key] = value
+
+            tmdb_poster = (
+                tmdb_details.get("backdrop_url")
+                if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
+                else tmdb_details.get("poster_url")
+            )
+            poster_url = imdb_details.get("poster_url") or tmdb_poster or movie_doc.get("poster_url")
+            raw_genres = details.get("genres")
+            if isinstance(raw_genres, (list, tuple, set)):
+                genres = ", ".join(str(g) for g in raw_genres if g)
+            elif isinstance(raw_genres, str):
+                genres = raw_genres
+            else:
+                genres = movie_doc.get("genres", "N/A")
+
+            updates = {
+                "title": details.get("title") or movie_doc.get("title") or base_name,
+                "genres": genres or "N/A",
+                "rating": details.get("rating") or movie_doc.get("rating") or "N/A",
+                "runtime": details.get("runtime") or movie_doc.get("runtime") or "N/A",
+                "year": movie_doc.get("year") or details.get("year"),
+                "poster_url": poster_url,
+                "backup_poster_url": tmdb_poster if poster_url and poster_url != tmdb_poster else movie_doc.get("backup_poster_url"),
+                "imdb_url": imdb_details.get("url") or movie_doc.get("imdb_url") or (
+                    f"https://www.imdb.com/title/{imdb_details['imdb_id']}"
+                    if imdb_details.get("imdb_id") else details.get("tmdb_url", "")
+                )
+            }
+            await db.movie_updates.update_one(
+                {"_id": base_name},
+                {"$set": updates}
+            )
+            movie_doc.update(updates)
+            updated += 1
+
+            old_message_id = movie_doc.get("message_id")
+            if old_message_id and poster_url:
+                try:
+                    await bot.delete_messages(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        message_ids=old_message_id
+                    )
+                    await db.movie_updates.update_one(
+                        {"_id": base_name},
+                        {"$set": {"message_id": None, "is_photo": False}}
+                    )
+                    movie_doc["message_id"] = None
+                    await send_movie_update(bot, base_name)
+                    posted += 1
+                except Exception:
+                    logger.exception("Could not replace old movie post during refresh: %s", base_name)
+                    await update_movie_message(bot, base_name)
+            else:
+                await update_movie_message(bot, base_name)
+
+            await asyncio.sleep(1)
+        except Exception:
+            logger.exception("Metadata refresh failed for %s", base_name)
+
+    await status.edit_text(
+        f"<b>✅ Refresh complete!\n\n"
+        f"Movies checked: {checked}\n"
+        f"Metadata updated: {updated}\n"
+        f"Channel posts refreshed: {posted}</b>"
     )
