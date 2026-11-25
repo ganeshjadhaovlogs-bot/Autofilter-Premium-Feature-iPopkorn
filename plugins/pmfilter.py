@@ -957,7 +957,14 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data.startswith("checksub"):
         try:
-            ident, kk, file_id = query.data.split("#")
+            parts = query.data.split("#")
+            if len(parts) != 3:
+                await query.answer(
+                    "⚠️ This old button has expired. Please open the movie link again.",
+                    show_alert=True
+                )
+                return
+            ident, kk, file_id = parts
             btn = []
             chat = file_id.split("_")[0]
             settings = await get_settings(chat)
