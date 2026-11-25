@@ -672,6 +672,14 @@ async def delete(bot, message):
                         await msg.edit('Fɪʟᴇ ɴᴏᴛ ғᴏᴜɴᴅ ɪɴ ᴅᴀᴛᴀʙᴀsᴇ ❌')
 
 
+    if result.deleted_count:
+        try:
+            from plugins.channel import sync_movie_updates_after_file_delete
+            await sync_movie_updates_after_file_delete(bot, [media.file_name])
+        except Exception:
+            logger.exception("Could not sync movie channel after /delete")
+
+
 @Client.on_message(filters.command('deleteall') & filters.user(ADMINS))
 async def delete_all_index(bot, message):
     await message.reply_text(
