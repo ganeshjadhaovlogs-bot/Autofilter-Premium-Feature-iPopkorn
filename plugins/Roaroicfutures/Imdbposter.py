@@ -71,51 +71,55 @@ async def fetch_image(url, size=(860, 1200)):
     return None
 
 
-async def get_movie_details(query, id=False, file=None):
+def _get_movie_details_sync(query, id=False, file=None):
+    """Run Cinemagoer synchronously in a worker thread."""
     try:
         if not id:
-            query = query.strip().lower()
-            title = query
-            year_match = re.search(r'\b([12]\d{3})\)?            movieid = ia.search_movie(title.lower(), results=10)
-            if not movieid:
+            raw_query = str(query or "").strip()
+            year_match = re.search(r'\b([12]\d{3})\)?$', raw_query)
+            year = year_match.group(1) if year_match else None
+            title = re.sub(r'\s*\(?[12]\d{3}\)?$', '', raw_query).strip()
+            if not year and file:
+                file_year = re.search(r'\b([12]\d{3})\b', str(file))
+                year = file_year.group(1) if file_year else None
+            if not title:
+                title = raw_query
+
+            results = ia.search_movie(title, results=15)
+            if not results:
+                logger.warning("IMDb found no results for title: %s", title)
                 return None
+
+            candidates = [
+                item for item in results
+                if item.get("kind") in ("movie", "tv series", "tv mini series", "tv movie")
+            ] or results
             if year:
-                filtered = list(filter(lambda k: str(k.get('year')) == str(year), movieid))
-                if not filtered:
-                    filtered = movieid
-            else:
-                filtered = movieid
-            movieid = list(filter(lambda k: k.get('kind') in ['movie', 'tv series'], filtered))
-            if not movieid:
-                movieid = filtered
-            movieid = movieid[0].movieID
+                year_matches = [item for item in candidates if str(item.get("year", "")) == year]
+                if year_matches:
+                    candidates = year_matches
+            movie_id = candidates[0].movieID
         else:
-            movieid = query
-        movie = ia.get_movie(movieid)
-        ia.update(movie, info=['main', 'vote details'])
-        if movie.get("original air date"):
-            date = movie["original air date"]
-        elif movie.get("year"):
-            date = movie.get("year")
-        else:
-            date = "N/A"
-        plot = movie.get('plot')
-        if plot and len(plot) > 0:
-            plot = plot[0]
-        else:
-            plot = movie.get('plot outline')
+            movie_id = str(query).removeprefix("tt")
+
+        movie = ia.get_movie(movie_id)
+        ia.update(movie, info=["main", "vote details"])
+        plot = movie.get("plot") or movie.get("plot outline")
+        if isinstance(plot, list):
+            plot = plot[0] if plot else None
         if plot and len(plot) > 800:
             plot = plot[:800] + "..."
-        poster_url = movie.get('full-size cover url') or movie.get('cover url')
+
+        imdb_id = str(movie.get("imdbID") or movie_id)
         return {
-            'title': movie.get('title'),
-            'votes': movie.get('votes'),
+            "title": movie.get("title"),
+            "votes": movie.get("votes"),
             "aka": list_to_str(movie.get("akas")),
             "seasons": movie.get("number of seasons"),
-            "box_office": movie.get('box office'),
-            'localized_title': movie.get('localized title'),
-            'kind': movie.get("kind"),
-            "imdb_id": f"tt{movie.get('imdbID')}",
+            "box_office": movie.get("box office"),
+            "localized_title": movie.get("localized title"),
+            "kind": movie.get("kind"),
+            "imdb_id": f"tt{imdb_id}",
             "cast": list_to_str(movie.get("cast")),
             "runtime": list_to_str(movie.get("runtimes")),
             "countries": list_to_str(movie.get("countries")),
@@ -128,17 +132,24 @@ async def get_movie_details(query, id=False, file=None):
             "cinematographer": list_to_str(movie.get("cinematographer")),
             "music_team": list_to_str(movie.get("music department")),
             "distributors": list_to_str(movie.get("distributors")),
-            'release_date': date,
-            'year': movie.get('year'),
-            'genres': list_to_str(movie.get("genres")),
-            'poster_url': poster_url,
-            'plot': plot,
-            'rating': str(movie.get("rating", "N/A")),
-            'url': f'https://www.imdb.com/title/tt{movieid}'
+            "release_date": movie.get("original air date") or movie.get("year") or "N/A",
+            "year": movie.get("year"),
+            "genres": list_to_str(movie.get("genres")),
+            "poster_url": movie.get("full-size cover url") or movie.get("cover url"),
+            "plot": plot,
+            "rating": str(movie.get("rating") or "N/A"),
+            "url": f"https://www.imdb.com/title/tt{imdb_id}"
         }
     except Exception as e:
-        logger.error(f"An error occurred in get_movie_details: {e}")
+        logger.exception("IMDb lookup failed for %r: %s", query, e)
         return None
+
+
+async def get_movie_details(query, id=False, file=None):
+    """Async wrapper so IMDb network calls do not block the bot event loop."""
+    import asyncio
+    return await asyncio.to_thread(_get_movie_details_sync, query, id, file)
+
 
 TMDB_API = "https://api.themoviedb.org/3"
 TMDB_IMG = "https://image.tmdb.org/t/p"
