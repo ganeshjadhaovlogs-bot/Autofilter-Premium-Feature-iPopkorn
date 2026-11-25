@@ -57,14 +57,36 @@ class temp(object):
     TEMP_INVITE_LINKS = {}
 
 async def _has_live_join_request(bot, channel_id, user_id):
-    """Return True only while Telegram still lists this user's request as pending."""
+    """Check every page of Telegram's pending requests for this exact user."""
+    offset_request = None
     try:
-        async for request in bot.get_chat_join_requests(channel_id, limit=100):
-            if getattr(getattr(request, "user", None), "id", None) == user_id:
-                await db.add_join_req(user_id, channel_id)
-                return True
+        while True:
+            page = []
+            async for request in bot.get_chat_join_requests(
+                channel_id,
+                offset_request=offset_request,
+                limit=100
+            ):
+                page.append(request)
+                if getattr(getattr(request, "user", None), "id", None) == user_id:
+                    await db.add_join_req(user_id, channel_id)
+                    return True
+
+            if len(page) < 100:
+                break
+
+            next_offset = page[-1]
+            if next_offset is offset_request:
+                break
+            offset_request = next_offset
+
     except Exception as e:
         logger.warning(f"Could not verify pending join request in {channel_id}: {e}")
+        # Do not grant access from an old DB record if Telegram cannot confirm it.
+        await db.remove_join_req(user_id, channel_id)
+        return False
+
+    # No live pending request exists. Remove any stale request record.
     await db.remove_join_req(user_id, channel_id)
     return False
 
