@@ -75,13 +75,13 @@ async def is_req_subscribed(bot, user_id, rqfsub_channels):
         try:
             # Verify the request is still pending on Telegram; old DB records
             # alone must never grant access after a request was declined.
-            pending_requests = await bot.get_chat_join_requests(
+            is_pending = False
+            async for request in bot.get_chat_join_requests(
                 ch_id, query=str(user_id), limit=100
-            )
-            is_pending = any(
-                getattr(getattr(request, "user", None), "id", None) == user_id
-                for request in pending_requests
-            )
+            ):
+                if getattr(getattr(request, "user", None), "id", None) == user_id:
+                    is_pending = True
+                    break
             if is_pending:
                 await db.add_join_req(user_id, ch_id)
                 continue
@@ -120,13 +120,14 @@ async def is_subscribed(bot, user_id, fsub_channels):
         # A database record is not enough: verify the request is still pending
         # on Telegram so users who left or whose request was declined are blocked.
         try:
-            pending_requests = await bot.get_chat_join_requests(
+            is_pending = False
+            async for request in bot.get_chat_join_requests(
                 channel_id, query=str(user_id), limit=100
-            )
-            if any(
-                getattr(getattr(request, "user", None), "id", None) == user_id
-                for request in pending_requests
             ):
+                if getattr(getattr(request, "user", None), "id", None) == user_id:
+                    is_pending = True
+                    break
+            if is_pending:
                 await db.add_join_req(user_id, channel_id)
                 return None
             await db.remove_join_req(user_id, channel_id)
