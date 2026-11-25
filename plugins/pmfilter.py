@@ -863,13 +863,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         link = await client.create_chat_invite_link(int(REQST_CHANNEL))
     except:
         pass
-    if query.data == "fsub_retry":
-        await query.answer(
-            "Channel verification could not complete. Please try the file link again in a moment.",
-            show_alert=True
-        )
-
-    elif query.data == "close_data":
+    if query.data == "close_data":
         try:
             user = query.message.reply_to_message.from_user.id
         except:
@@ -963,88 +957,31 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data.startswith("checksub"):
         try:
-            parts = query.data.split("#", 2)
-            if len(parts) != 3 or not parts[1] or not parts[2]:
-                await query.answer(
-                    "⚠️ This button is invalid or expired. Please open the movie link again.",
-                    show_alert=True
-                )
-                return
-
-            prefix, second, third = parts
-            # Support both callback formats used by older and newer messages:
-            # checksub#file#<chat_id>_<file_id>
-            # checksub#<chat_id>#<file_id>
-            try:
-                chat_id = int(second)
-                start_prefix = "file"
-                file_id = third
-            except (TypeError, ValueError):
-                start_prefix = second
-                payload = third
-                if payload.startswith("file_"):
-                    payload = payload[5:]
-                try:
-                    chat_text, file_id = payload.split("_", 1)
-                    chat_id = int(chat_text)
-                except (TypeError, ValueError):
-                    await query.answer(
-                        "⚠️ This button is invalid or expired. Please open the movie link again.",
-                        show_alert=True
-                    )
-                    return
-
-            if not file_id:
-                await query.answer(
-                    "⚠️ This button is invalid or expired. Please open the movie link again.",
-                    show_alert=True
-                )
-                return
-
+            ident, kk, file_id = query.data.split("#")
             btn = []
-            settings = await get_settings(chat_id)
-            fsub_channels = list(dict.fromkeys(
-                (settings.get('fsub', []) if settings else []) + AUTH_CHANNELS
-            ))
+            chat = file_id.split("_")[0]
+            settings = await get_settings(chat)
+            fsub_channels = list(dict.fromkeys((settings.get('fsub', []) if settings else [])+ AUTH_CHANNELS)) 
             btn += await is_subscribed(client, query.from_user.id, fsub_channels)
             btn += await is_req_subscribed(client, query.from_user.id, AUTH_REQ_CHANNELS)
-
             if btn:
-                # Keep the user list in sync when a user no longer has channel access.
-                await db.delete_user(query.from_user.id)
-                callback_payload = f"{chat_id}_{file_id}"
-                btn.append([InlineKeyboardButton(
-                    "🔄 ᴛʀʏ ᴀɢᴀɪɴ",
-                    callback_data=f"checksub#file#{callback_payload}"
-                )])
+                btn.append([InlineKeyboardButton("🔄 ᴛʀʏ ᴀɢᴀɪɴ", callback_data=f"checksub#{kk}#{file_id}")])
                 try:
-                    await query.edit_message_reply_markup(
-                        reply_markup=InlineKeyboardMarkup(btn)
-                    )
+                    await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
                 except MessageNotModified:
                     pass
                 await query.answer(
-                    f"👋 Hello {query.from_user.first_name},\\n\\n"
-                    "🛑 Yᴏᴜ ʜᴀᴠᴇ ɴᴏᴛ ᴊᴏɪɴᴇᴅ ᴀʟʟ ʀᴇǫᴜɪʀᴇᴅ ᴜᴘᴅᴀᴛᴇ Cʜᴀɴɴᴇʟs.\\n"
-                    "👉 Pʟᴇᴀsᴇ ᴊᴏɪɴ ᴇᴀᴄʜ ᴏɴᴇ ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.\\n",
+                    f"👋 Hello {query.from_user.first_name},\n\n"
+                    "🛑 Yᴏᴜ ʜᴀᴠᴇ ɴᴏᴛ ᴊᴏɪɴᴇᴅ ᴀʟʟ ʀᴇǫᴜɪʀᴇᴅ ᴜᴘᴅᴀᴛᴇ Cʜᴀɴɴᴇʟs.\n"
+                    "👉 Pʟᴇᴀsᴇ ᴊᴏɪɴ ᴇᴀᴄʜ ᴏɴᴇ ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.\n",
                     show_alert=True
                 )
                 return
-
-            await query.answer(
-                url=f"https://t.me/{temp.U_NAME}?start={start_prefix}_{chat_id}_{file_id}"
-            )
+            await query.answer(url=f"https://t.me/{temp.U_NAME}?start={kk}_{file_id}")
             await query.message.delete()
         except Exception as e:
-            logger.exception("Error in checksub callback")
-            try:
-                await query.answer(
-                    "⚠️ Verification failed. Please tap Try Again.",
-                    show_alert=True
-                )
-            except Exception:
-                pass
-            await log_error(client, f"❌ Error in checksub callback:\\n\\n{repr(e)}")
+            await log_error(client, f"❌ Error in checksub callback:\n\n{repr(e)}")
+            logger.error(f"❌ Error in checksub callback:\n\n{repr(e)}")
 
 
     elif query.data.startswith("killfilesdq"):
