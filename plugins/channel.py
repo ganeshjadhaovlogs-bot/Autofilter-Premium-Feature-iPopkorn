@@ -305,14 +305,24 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             if value not in (None, "", [], "N/A"):
                 details[key] = value
 
+        # Prefer TMDB's actual poster artwork for channel announcements.
+        # A backdrop is only a secondary TMDB option; IMDb is the final fallback.
+        tmdb_poster = tmdb_details.get("poster_url")
+        tmdb_backdrop = tmdb_details.get("backdrop_url") if LANDSCAPE_POSTER else None
         imdb_poster = imdb_details.get("poster_url")
-        tmdb_poster = (
-            tmdb_details.get("backdrop_url")
-            if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
-            else tmdb_details.get("poster_url")
+        poster_url = tmdb_poster or tmdb_backdrop or imdb_poster
+        backup_poster_url = next(
+            (url for url in (tmdb_backdrop, imdb_poster) if url and url != poster_url),
+            None
         )
-        poster_url = imdb_poster or tmdb_poster
-        backup_poster_url = tmdb_poster if imdb_poster else None
+        logger.info(
+            "Announcement poster source for '%s': %s",
+            base_name,
+            "TMDB poster" if tmdb_poster and poster_url == tmdb_poster
+            else "TMDB backdrop" if tmdb_backdrop and poster_url == tmdb_backdrop
+            else "IMDb" if imdb_poster and poster_url == imdb_poster
+            else "no provider artwork"
+        )
 
         raw_genres = details.get("genres", "N/A")
         if isinstance(raw_genres, str):
@@ -394,25 +404,28 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 )
                 tmdb_details = {}
 
-            tmdb_poster = (
-                tmdb_details.get("backdrop_url")
-                if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
-                else tmdb_details.get("poster_url")
-            )
-            # Prefer a newly verified IMDb/TMDB URL over a stale URL already
-            # stored in the database; a stale URL can prevent poster recovery.
-            poster_url = (
-                imdb_details.get("poster_url")
-                or tmdb_poster
-                or movie_doc.get("poster_url")
+            # TMDB poster_path is the primary announcement artwork.
+            # Use TMDB backdrop only if poster_path is unavailable, then IMDb.
+            tmdb_poster = tmdb_details.get("poster_url")
+            tmdb_backdrop = tmdb_details.get("backdrop_url") if LANDSCAPE_POSTER else None
+            imdb_poster = imdb_details.get("poster_url")
+            fresh_poster = tmdb_poster or tmdb_backdrop or imdb_poster
+            poster_url = fresh_poster or movie_doc.get("poster_url") or movie_doc.get("backup_poster_url")
+            logger.info(
+                "Repair poster source for '%s': %s",
+                base_name,
+                "TMDB poster" if tmdb_poster and fresh_poster == tmdb_poster
+                else "TMDB backdrop" if tmdb_backdrop and fresh_poster == tmdb_backdrop
+                else "IMDb" if imdb_poster and fresh_poster == imdb_poster
+                else "saved artwork/fallback"
             )
             updates = {}
             if poster_url:
                 updates["poster_url"] = poster_url
-                updates["backup_poster_url"] = (
-                    tmdb_details.get("poster_url")
-                    if imdb_details.get("poster_url") and tmdb_details.get("poster_url")
-                    else movie_doc.get("backup_poster_url")
+                updates["backup_poster_url"] = next(
+                    (url for url in (tmdb_backdrop, imdb_poster, movie_doc.get("backup_poster_url"))
+                     if url and url != poster_url),
+                    None
                 )
             title_candidate = imdb_details.get("title") or tmdb_details.get("title")
             if title_candidate and not movie_doc.get("title"):
@@ -932,14 +945,20 @@ async def refresh_all_movie_metadata(bot, message):
                     if value not in (None, "", [], "N/A"):
                         details[key] = value
 
-                tmdb_poster = (
-                    tmdb_details.get("backdrop_url")
-                    if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
-                    else tmdb_details.get("poster_url")
+                # Always select TMDB's actual poster when it exists.
+                # Backdrop is secondary; IMDb is used only when TMDB has no artwork.
+                tmdb_poster = tmdb_details.get("poster_url")
+                tmdb_backdrop = tmdb_details.get("backdrop_url") if LANDSCAPE_POSTER else None
+                imdb_poster = imdb_details.get("poster_url")
+                poster_url = tmdb_poster or tmdb_backdrop or imdb_poster
+                logger.info(
+                    "Refresh poster source for '%s': %s",
+                    base_name,
+                    "TMDB poster" if tmdb_poster and poster_url == tmdb_poster
+                    else "TMDB backdrop" if tmdb_backdrop and poster_url == tmdb_backdrop
+                    else "IMDb" if imdb_poster and poster_url == imdb_poster
+                    else "no provider artwork"
                 )
-                # Only use fresh artwork from a verified title/year match.
-                # Do not keep an old unrelated poster when both providers fail.
-                poster_url = imdb_details.get("poster_url") or tmdb_poster
                 raw_genres = details.get("genres")
                 if isinstance(raw_genres, (list, tuple, set)):
                     genres = ", ".join(str(g) for g in raw_genres if g)
@@ -962,9 +981,10 @@ async def refresh_all_movie_metadata(bot, message):
                     "ott_platform": tmdb_details.get("ott_platform") or movie_doc.get("ott_platform") or "N/A",
                     "online_languages": online_languages or movie_doc.get("online_languages") or "N/A",
                     "poster_url": poster_url or movie_doc.get("poster_url") or movie_doc.get("backup_poster_url"),
-                    "backup_poster_url": (
-                        tmdb_poster if poster_url and poster_url != tmdb_poster
-                        else movie_doc.get("backup_poster_url")
+                    "backup_poster_url": next(
+                        (url for url in (tmdb_backdrop, imdb_poster, movie_doc.get("backup_poster_url"))
+                         if url and url != poster_url),
+                        None
                     ),
                     "imdb_url": imdb_details.get("url") or movie_doc.get("imdb_url") or (
                         f"https://www.imdb.com/title/{imdb_details['imdb_id']}"
