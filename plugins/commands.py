@@ -160,7 +160,11 @@ async def start(client, message):
         return 
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
-        await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
+        # User registration must not depend on the optional log channel.
+        try:
+            await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
+        except Exception as e:
+            logger.warning(f"Could not send new-user log to LOG_CHANNEL ({LOG_CHANNEL}): {type(e).__name__}: {e}")
     if len(message.command) != 2:
         buttons = [[
                     InlineKeyboardButton(' ⌣🍒ᴄʜᴀɴɴᴇʟs ', callback_data='channel'),
@@ -190,12 +194,22 @@ async def start(client, message):
         m=await message.reply_text("⏳")
         await asyncio.sleep(0.4)
         await m.delete()        
-        await message.reply_photo(
-            photo=random.choice(PICS),
-            caption=script.START_TXT.format(message.from_user.mention, gtxt, temp.U_NAME, temp.B_NAME),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        start_caption = script.START_TXT.format(message.from_user.mention, gtxt, temp.U_NAME, temp.B_NAME)
+        try:
+            await message.reply_photo(
+                photo=random.choice(PICS),
+                caption=start_caption,
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML
+            )
+        except Exception as e:
+            logger.warning(f"Start menu photo failed, sending text instead: {type(e).__name__}: {e}")
+            await message.reply_text(
+                start_caption,
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True
+            )
         return
 
     if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
