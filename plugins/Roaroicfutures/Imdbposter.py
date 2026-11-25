@@ -635,16 +635,19 @@ async def get_movie_detailsx(query, id=False, file=None):
         if language.get("english_name") or language.get("name")
     ]
 
-    # Include subscription, free/ad-supported AND rent/buy services for India.
-    # TMDB often lists a title only under rent/buy, so limiting this to flatrate
-    # incorrectly displayed OTT as N/A even when a provider was available.
+    # Show only actual streaming/subscription services in India.
+    # Rent/buy marketplaces such as YouTube Movies are not OTT subscriptions
+    # and must not be shown as the title's OTT platform.
     provider_results = (watch_data or {}).get("results") or {}
     providers = provider_results.get("IN") or {}
     ott_names = sorted({
         provider.get("provider_name")
-        for category in ("flatrate", "free", "ads", "rent", "buy")
+        for category in ("flatrate", "free", "ads")
         for provider in providers.get(category, [])
         if provider.get("provider_name")
+        and provider.get("provider_name").strip().lower() not in {
+            "youtube", "youtube movies", "google play movies"
+        }
     })
     if not providers:
         logger.info("TMDB has no India watch-provider data for %r", raw_query)
