@@ -70,9 +70,5 @@ async def deletemultiplemedia(bot, message):
                     else:
                         logger.info('File not found in database.')
 
-    if result.deleted_count:
-        try:
-            from plugins.channel import sync_movie_updates_after_file_delete
-            await sync_movie_updates_after_file_delete(bot, [media.file_name])
-        except Exception:
-            logger.exception("Could not sync movie channel after channel file deletion.")
+    # Direct deletion from the database channel must not remove or edit
+    # the public movie announcement. Only explicit bot delete commands sync it.
