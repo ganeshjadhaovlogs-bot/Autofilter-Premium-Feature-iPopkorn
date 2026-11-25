@@ -819,23 +819,25 @@ async def refresh_all_movie_metadata(bot, message):
                     if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
                     else tmdb_details.get("poster_url")
                 )
-                poster_url = imdb_details.get("poster_url") or tmdb_poster or movie_doc.get("poster_url")
+                # Only use fresh artwork from a verified title/year match.
+                # Do not keep an old unrelated poster when both providers fail.
+                poster_url = imdb_details.get("poster_url") or tmdb_poster
                 raw_genres = details.get("genres")
                 if isinstance(raw_genres, (list, tuple, set)):
                     genres = ", ".join(str(g) for g in raw_genres if g)
                 elif isinstance(raw_genres, str):
                     genres = raw_genres
                 else:
-                    genres = movie_doc.get("genres", "N/A")
+                    genres = "N/A"
 
                 updates = {
-                    "title": details.get("title") or movie_doc.get("title") or base_name,
+                    "title": details.get("title") or base_name,
                     "genres": genres or "N/A",
-                    "rating": details.get("rating") or movie_doc.get("rating") or "N/A",
-                    "runtime": details.get("runtime") or movie_doc.get("runtime") or "N/A",
-                    "year": movie_doc.get("year") or details.get("year"),
+                    "rating": details.get("rating") or "N/A",
+                    "runtime": details.get("runtime") or "N/A",
+                    "year": details.get("year") or movie_doc.get("year"),
                     "poster_url": poster_url,
-                    "backup_poster_url": tmdb_poster if poster_url and poster_url != tmdb_poster else movie_doc.get("backup_poster_url"),
+                    "backup_poster_url": tmdb_poster if poster_url and poster_url != tmdb_poster else None,
                     "imdb_url": imdb_details.get("url") or movie_doc.get("imdb_url") or (
                         f"https://www.imdb.com/title/{imdb_details['imdb_id']}"
                         if imdb_details.get("imdb_id") else details.get("tmdb_url", "")
