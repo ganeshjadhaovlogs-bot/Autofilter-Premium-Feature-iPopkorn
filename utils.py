@@ -67,28 +67,16 @@ async def is_req_subscribed(bot, user_id, rqfsub_channels):
         except UserNotParticipant:
             pass
         except Exception as e:
-            # A membership lookup error must not replace the Request to Join
-            # button with a second Try Again button. Keep access restricted,
-            # log the issue, and continue to build the join-request invite.
             logger.error(f"Error checking membership in {ch_id}: {e}")
 
+        # The chat_join_request update stores a pending request in our DB.
+        # A pending request must grant file access immediately; do not wait
+        # for an administrator to approve it.
         try:
-            # Verify the request is still pending on Telegram; old DB records
-            # alone must never grant access after a request was declined.
-            is_pending = False
-            async for request in bot.get_chat_join_requests(
-                ch_id, query=str(user_id), limit=100
-            ):
-                if getattr(getattr(request, "user", None), "id", None) == user_id:
-                    is_pending = True
-                    break
-            if is_pending:
-                await db.add_join_req(user_id, ch_id)
+            if await db.has_joined_channel(user_id, ch_id):
                 continue
-            await db.remove_join_req(user_id, ch_id)
         except Exception as e:
-            logger.warning(f"Could not verify pending join request in {ch_id}: {e}")
-            # Fail closed: a stale/unverifiable request does not grant access.
+            logger.warning(f"Could not read pending request record for {ch_id}: {e}")
 
         try:
             chat = await bot.get_chat(ch_id)
@@ -102,6 +90,7 @@ async def is_req_subscribed(bot, user_id, rqfsub_channels):
             logger.warning(f"Invite link error for {ch_id}: {e}")
 
     return btn
+
 
 async def is_subscribed(bot, user_id, fsub_channels):
     btn = []
@@ -117,22 +106,13 @@ async def is_subscribed(bot, user_id, fsub_channels):
         except Exception as e:
             logger.error(f"Membership lookup failed for {channel_id}: {e}")
 
-        # A database record is not enough: verify the request is still pending
-        # on Telegram so users who left or whose request was declined are blocked.
+        # A recorded join request is pending until Telegram reports the user
+        # as a member. Grant access immediately without waiting for approval.
         try:
-            is_pending = False
-            async for request in bot.get_chat_join_requests(
-                channel_id, query=str(user_id), limit=100
-            ):
-                if getattr(getattr(request, "user", None), "id", None) == user_id:
-                    is_pending = True
-                    break
-            if is_pending:
-                await db.add_join_req(user_id, channel_id)
+            if await db.has_joined_channel(user_id, channel_id):
                 return None
-            await db.remove_join_req(user_id, channel_id)
         except Exception as e:
-            logger.warning(f"Could not verify pending request for {channel_id}: {e}")
+            logger.warning(f"Could not read pending request record for {channel_id}: {e}")
 
         try:
             chat = await bot.get_chat(int(channel_id))
