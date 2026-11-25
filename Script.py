@@ -226,13 +226,12 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 ✨ ᴛɪᴛʟᴇ : <code>{filename}</code>
 ─┉─•✦•─┉─
 <blockquote>🎭 ɢᴇɴʀᴇs  : <b>{genres}</b>
-🍿 ᴏᴛᴛ       : <b>{ott}</b>
+🍿 ᴏᴛᴛ      : <b>{ott}</b>
 ⏱️ ʀᴜɴᴛɪᴍᴇ  : <b>{runtime}</b>
 🎬 ǫᴜᴀʟɪᴛʏ  : <b>{quality}</b>
-🔉 ᴀᴜᴅɪᴏ     : <b>{language}</b>
-🌟 ʀᴀᴛɪɴɢ     : <b>{rating}</b>
-{episodes}
-</blockquote>─┉─•✦•─┉─
+🔉 ᴀᴜᴅɪᴏ    : <b>{language}</b>
+🌟 ʀᴀᴛɪɴɢ   : <b>{rating}</b>
+{episodes}</blockquote>─┉─•✦•─┉─
 
 <b>🔍 Sᴇᴀʀᴄʜ → {search_link} 🔍</b>
 """
