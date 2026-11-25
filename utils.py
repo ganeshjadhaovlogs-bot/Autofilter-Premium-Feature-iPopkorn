@@ -59,32 +59,49 @@ class temp(object):
 async def is_req_subscribed(bot, user_id, rqfsub_channels):
     btn = []
     for ch_id in rqfsub_channels:
-        if await db.has_joined_channel(user_id, ch_id):
-            continue
         try:
             member = await bot.get_chat_member(ch_id, user_id)
             if member.status != enums.ChatMemberStatus.BANNED:
-                await db.add_join_req(user_id, ch_id)
+                await db.remove_join_req(user_id, ch_id)
                 continue
         except UserNotParticipant:
             pass
         except Exception as e:
             logger.error(f"Error checking membership in {ch_id}: {e}")
+            # If Telegram membership status cannot be checked, do not grant access.
+            btn.append([InlineKeyboardButton("⚠️ Try Again", callback_data="checksub")])
+            continue
 
         try:
-            chat   = await bot.get_chat(ch_id)
-            invite = await bot.create_chat_invite_link(
-                ch_id,
-                creates_join_request=True
+            # Verify the request is still pending on Telegram; old DB records
+            # alone must never grant access after a request was declined.
+            pending_requests = await bot.get_chat_join_requests(
+                ch_id, query=str(user_id), limit=100
             )
-            btn.append([InlineKeyboardButton(f"⛔️ Join {chat.title}", url=invite.invite_link)])
-        except ChatAdminRequired:
-            logger.warning(f"Bot not admin in {ch_id}")
+            is_pending = any(
+                getattr(getattr(request, "user", None), "id", None) == user_id
+                for request in pending_requests
+            )
+            if is_pending:
+                await db.add_join_req(user_id, ch_id)
+                continue
+            await db.remove_join_req(user_id, ch_id)
+        except Exception as e:
+            logger.warning(f"Could not verify pending join request in {ch_id}: {e}")
+            # Fail closed: a stale/unverifiable request does not grant access.
+
+        try:
+            chat = await bot.get_chat(ch_id)
+            invite = await bot.create_chat_invite_link(
+                ch_id, creates_join_request=True
+            )
+            btn.append([InlineKeyboardButton(
+                f"📨 Request to Join {chat.title}", url=invite.invite_link
+            )])
         except Exception as e:
             logger.warning(f"Invite link error for {ch_id}: {e}")
-            
-    return btn
 
+    return btn
 
 async def is_subscribed(bot, user_id, fsub_channels):
     btn = []
