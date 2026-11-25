@@ -317,7 +317,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             ),
             "year": media_info["year"] or imdb_details.get("year") or tmdb_details.get("year"),
             "tag": media_info["tag"],
-            "ott_platform": media_info["ott_platform"],
+            "ott_platform": details.get("ott_platform") or media_info["ott_platform"],
+            "online_languages": ", ".join(details.get("languages") or []),
             "message_id": None,
             "is_photo": False
         }
@@ -351,6 +352,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             or movie_doc.get("genres") in (None, "", "N/A")
             or movie_doc.get("rating") in (None, "", "N/A")
             or movie_doc.get("runtime") in (None, "", "N/A")
+            or movie_doc.get("ott_platform") in (None, "", "N/A")
+            or movie_doc.get("online_languages") in (None, "", "N/A")
         ):
             imdb_details = await get_movie_details(base_name) or {}
             # Retry both providers for old database records missing poster/details.
@@ -386,6 +389,14 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                     if field == "genres" and not isinstance(candidate, str):
                         candidate = ", ".join(str(item) for item in candidate)
                     updates[field] = candidate
+
+            online_languages = tmdb_details.get("languages") or []
+            if online_languages and movie_doc.get("online_languages") in (None, "", "N/A"):
+                updates["online_languages"] = ", ".join(str(item) for item in online_languages)
+            online_ott = tmdb_details.get("ott_platform")
+            if online_ott and movie_doc.get("ott_platform") in (None, "", "N/A"):
+                updates["ott_platform"] = online_ott
+
             if imdb_details.get("url"):
                 updates["imdb_url"] = imdb_details["url"]
 
@@ -742,7 +753,13 @@ def generate_movie_message(movie_doc, base_name):
             runtime += "m"
     quality_str = ", ".join(sorted(all_qualities)) if all_qualities else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
-    ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
+    ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else (
+        movie_doc.get("ott_platform") or "N/A"
+    )
+    if not all_languages:
+        online_languages = movie_doc.get("online_languages")
+        if online_languages:
+            language_str = online_languages
 
     display_title = movie_doc.get("title") or base_name
     year = movie_doc.get("year")
