@@ -67,10 +67,10 @@ async def is_req_subscribed(bot, user_id, rqfsub_channels):
         except UserNotParticipant:
             pass
         except Exception as e:
+            # A membership lookup error must not replace the Request to Join
+            # button with a second Try Again button. Keep access restricted,
+            # log the issue, and continue to build the join-request invite.
             logger.error(f"Error checking membership in {ch_id}: {e}")
-            # If Telegram membership status cannot be checked, do not grant access.
-            btn.append([InlineKeyboardButton("⚠️ Try Again", callback_data="checksub")])
-            continue
 
         try:
             # Verify the request is still pending on Telegram; old DB records
