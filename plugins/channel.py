@@ -356,14 +356,17 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             # Retry both providers for old database records missing poster/details.
             tmdb_details = await get_movie_detailsx(base_name) or {}
 
+            tmdb_poster = (
+                tmdb_details.get("backdrop_url")
+                if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
+                else tmdb_details.get("poster_url")
+            )
+            # Prefer a newly verified IMDb/TMDB URL over a stale URL already
+            # stored in the database; a stale URL can prevent poster recovery.
             poster_url = (
                 imdb_details.get("poster_url")
+                or tmdb_poster
                 or movie_doc.get("poster_url")
-                or (
-                    tmdb_details.get("backdrop_url")
-                    if LANDSCAPE_POSTER and tmdb_details.get("backdrop_url")
-                    else tmdb_details.get("poster_url")
-                )
             )
             updates = {}
             if poster_url:
@@ -440,12 +443,15 @@ async def send_movie_update(bot, base_name):
             for poster_url in poster_urls:
                 if not poster_url:
                     continue
+                logger.info("Trying announcement artwork for '%s': %s", base_name, poster_url[:180])
                 resized_poster = await fetch_image(
                     poster_url,
                     size=(1280, 720)
                 )
                 if resized_poster:
+                    logger.info("Announcement artwork downloaded successfully for '%s'", base_name)
                     break
+                logger.warning("Announcement artwork URL failed for '%s': %s", base_name, poster_url[:180])
 
             # fetch_image already returns 16:9; normalize once more for safety.
             if resized_poster:
