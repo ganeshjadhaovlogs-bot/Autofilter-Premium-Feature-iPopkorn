@@ -264,11 +264,11 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     if not movie_doc:
         # IMDb is the primary source for title details and artwork.
         imdb_details = await get_movie_details(base_name) or {}
-        tmdb_details = {}
-        if TMDB_POSTER:
-            tmdb_details = await get_movie_detailsx(base_name) or {}
+        # Query TMDB as a second source even when IMDb returns partial metadata.
+        # TMDB_POSTER controls poster presentation only; it must not disable details lookup.
+        tmdb_details = await get_movie_detailsx(base_name) or {}
 
-        # Keep IMDb values whenever available; use TMDB only to fill gaps.
+        # IMDb has priority; TMDB fills every field IMDb does not provide.
         details = dict(tmdb_details)
         for key, value in imdb_details.items():
             if value not in (None, "", [], "N/A"):
@@ -285,10 +285,11 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
         raw_genres = details.get("genres", "N/A")
         if isinstance(raw_genres, str):
-            genre_list = [g.strip() for g in raw_genres.split(",")]
-            genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
+            genres = ", ".join(g.strip() for g in raw_genres.split(",") if g.strip()) or "N/A"
+        elif isinstance(raw_genres, (list, tuple, set)):
+            genres = ", ".join(str(g).strip() for g in raw_genres if str(g).strip()) or "N/A"
         else:
-            genres = ", ".join(g for g in raw_genres if g in STANDARD_GENRES) or "N/A"
+            genres = "N/A"
 
         movie_doc = {
             "_id": base_name,
@@ -342,9 +343,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             or movie_doc.get("runtime") in (None, "", "N/A")
         ):
             imdb_details = await get_movie_details(base_name) or {}
-            tmdb_details = {}
-            if TMDB_POSTER and not imdb_details.get("poster_url"):
-                tmdb_details = await get_movie_detailsx(base_name) or {}
+            # Retry both providers for old database records missing poster/details.
+            tmdb_details = await get_movie_detailsx(base_name) or {}
 
             poster_url = (
                 imdb_details.get("poster_url")
@@ -368,7 +368,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 candidate = imdb_details.get(field) or tmdb_details.get(field)
                 if candidate and current in (None, "", "N/A"):
                     if field == "genres" and not isinstance(candidate, str):
-                        candidate = ", ".join(candidate)
+                        candidate = ", ".join(str(item) for item in candidate)
                     updates[field] = candidate
             if imdb_details.get("url"):
                 updates["imdb_url"] = imdb_details["url"]
