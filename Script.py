@@ -223,14 +223,14 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
     MOVIE_UPDATE_NOTIFY_TXT = """
 <b>📥 ɴᴇᴡ {tag} ᴀᴅᴅᴇᴅ</b>
 
-✨ ᴛɪᴛʟᴇ : {filename}
+✨ ᴛɪᴛʟᴇ : <code>{filename}</code>
 ─┉─•✦•─┉─
 <blockquote>🎭 ɢᴇɴʀᴇs  : <b>{genres}</b>
 🍿 ᴏᴛᴛ       : <b>{ott}</b>
 ⏱️ ʀᴜɴᴛɪᴍᴇ  : <b>{runtime}</b>
 🎬 ǫᴜᴀʟɪᴛʏ  : <b>{quality}</b>
 🔉 ᴀᴜᴅɪᴏ     : <b>{language}</b>
-🌟 ʀᴀᴛɪɴɢ     : <b>{rating}</b>
+🌟 ʀᴀᴛɪɴɢ     : <b>{rating}</b>                     
 {episodes}</blockquote>─┉─•✦•─┉─
 
 <b>🔍 Sᴇᴀʀᴄʜ → {search_link} 🔍</b>
