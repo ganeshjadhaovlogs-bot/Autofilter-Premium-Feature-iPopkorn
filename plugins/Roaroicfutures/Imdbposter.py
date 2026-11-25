@@ -303,7 +303,7 @@ TMDB_IMG = "https://image.tmdb.org/t/p"
 
 
 def _tmdb_auth():
-    """Supports both TMDB v3 API key and v4 'Read Access Token' (starts with eyJ)."""
+    """Support TMDB v3 API keys and v4 read access tokens."""
     key = (TMDB_API_KEY or "").strip()
     if key.startswith("eyJ"):
         return {"Authorization": f"Bearer {key}", "accept": "application/json"}, {}
@@ -313,472 +313,221 @@ def _tmdb_auth():
 async def _tmdb_get(session, path, **params):
     headers, auth_params = _tmdb_auth()
     params.update(auth_params)
-    async with session.get(f"{TMDB_API}{path}", params=params, headers=headers,
-                           timeout=aiohttp.ClientTimeout(total=20)) as resp:
-        if resp.status != 200:
-            text = await resp.text()
-            logger.error(f"TMDB request failed [{resp.status}] {path}: {text[:200]}")
+    async with session.get(
+        f"{TMDB_API}{path}",
+        params=params,
+        headers=headers,
+        timeout=aiohttp.ClientTimeout(total=20)
+    ) as response:
+        if response.status != 200:
+            body = await response.text()
+            logger.error("TMDB request failed [%s] %s: %s", response.status, path, body[:200])
             return None
-        return await resp.json()
+        return await response.json()
 
 
 def _img(path, size="original"):
     return f"{TMDB_IMG}/{size}{path}" if path else None
 
 
-def _pick_image(items, lang):
-    """Best image path: preferred language first, then language-less, then anything."""
+def _pick_image(items, language):
     if not items:
         return None
-    for want in ("en", lang, None):
-        for it in items:
-            if it.get("iso_639_1") == want and it.get("file_path"):
-                return it["file_path"]
-    return items[0].get("file_path")
+    for wanted in ("en", language, None):
+        for item in items:
+            if item.get("iso_639_1") == wanted and item.get("file_path"):
+                return item["file_path"]
+    return next((item.get("file_path") for item in items if item.get("file_path")), None)
 
 
 async def get_movie_detailsx(query, id=False, file=None):
-    """
-    Fetch details + poster/backdrop straight from the official TMDB API.
-    ALWAYS returns a dict. On failure -> {"error": "..."} (never None),
-    so callers can safely fall back to IMDb.
-    """
-    if not TMDB_API_KEY or TMDB_API_KEY.startswith("http"):
-        return {"error": "TMDB_API_KEY is not set (get one from https://www.themoviedb.org/settings/api)"}
+    """Fetch verified movie/series metadata and India streaming-provider data from TMDB."""
+    if not TMDB_API_KEY or str(TMDB_API_KEY).startswith("http"):
+        return {"error": "TMDB_API_KEY is not configured"}
 
-    q = str(query).strip()
+    raw_query = str(query or "").strip()
+    title = raw_query
+    year = None
+
+    if not id:
+        year_match = re.search(r"\b((?:19|20)\d{2})\b", raw_query)
+        if year_match:
+            year = year_match.group(1)
+            title = re.sub(r"\s*\(?((?:19|20)\d{2})\)?\s*$", "", raw_query).strip()
+        elif file:
+            file_year = re.search(r"\b((?:19|20)\d{2})\b", str(file))
+            if file_year:
+                year = file_year.group(1)
+        title = title or raw_query
+
     try:
         async with aiohttp.ClientSession() as session:
-            media_type, tmdb_id = None, None
+            media_type = None
+            tmdb_id = None
 
             if id:
-                if q.startswith("tt"):
-                    found = await _tmdb_get(session, f"/find/{q}", external_source="imdb_id")
+                if raw_query.startswith("tt"):
+                    found = await _tmdb_get(session, f"/find/{raw_query}", external_source="imdb_id")
                     if found:
                         for kind, key in (("movie", "movie_results"), ("tv", "tv_results")):
                             if found.get(key):
-                                media_type, tmdb_id = kind, found[key][0]["id"]
+                                media_type = kind
+                                tmdb_id = found[key][0].get("id")
                                 break
-                elif q.isdigit():
-                    tmdb_id = int(q)
-                    media_type = "movie" if await _tmdb_get(session, f"/movie/{q}") else "tv"
+                elif raw_query.isdigit():
+                    tmdb_id = int(raw_query)
+                    media_type = "movie"
             else:
-                title = q.lower()
-                year = None
-                m = re.search(r'\b([12]\d{3})\b\)?\s*
-                elif file:
-                    m = re.search(r'\b([12]\d{3})\b', file)
-                    if m:
-                        year = m.group(1)
-                if not title:
-                    title = q.lower()
-
-                res = await _tmdb_get(session, "/search/multi", query=title, include_adult="false")
-                results = [r for r in (res or {}).get("results", []) if r.get("media_type") in ("movie", "tv")]
+                search = await _tmdb_get(
+                    session, "/search/multi",
+                    query=title, include_adult="false"
+                )
+                results = [
+                    item for item in (search or {}).get("results", [])
+                    if item.get("media_type") in ("movie", "tv")
+                ]
                 if not results:
-                    return {"error": f"No TMDB result for '{q}'"}
-                def norm_title(value):
+                    return {"error": f"No TMDB result for {title}"}
+
+                def normalize_title(value):
                     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
-                target = norm_title(title)
+                target = normalize_title(title)
                 ranked = []
                 for item in results:
-                    candidate_titles = [
+                    names = (
                         item.get("title"), item.get("name"),
                         item.get("original_title"), item.get("original_name")
-                    ]
+                    )
                     score = max(
-                        (difflib.SequenceMatcher(None, target, norm_title(value)).ratio()
-                         for value in candidate_titles if value),
+                        (difflib.SequenceMatcher(None, target, normalize_title(name)).ratio()
+                         for name in names if name),
                         default=0
                     )
                     date_value = item.get("release_date") or item.get("first_air_date") or ""
                     item_year = date_value[:4] if len(date_value) >= 4 else ""
                     ranked.append((score, item_year == str(year) if year else True, item))
-                ranked.sort(key=lambda entry: (entry[1], entry[0]), reverse=True)
 
                 exact = [
                     entry for entry in ranked
-                    if any(norm_title(value) == target for value in (
+                    if any(normalize_title(name) == target for name in (
                         entry[2].get("title"), entry[2].get("name"),
                         entry[2].get("original_title"), entry[2].get("original_name")
-                    ) if value)
+                    ) if name)
                 ]
                 exact_year = [entry for entry in exact if entry[1]]
-                if exact_year:
-                    chosen_entry = exact_year[0]
-                elif exact:
-                    logger.warning("TMDB exact title found but year mismatch for %r (%s); refusing unrelated match", title, year)
-                    return {"error": "TMDB title year mismatch"}
-                elif ranked and ranked[0][0] >= 0.90 and ranked[0][1]:
-                    chosen_entry = ranked[0]
-                else:
-                    logger.warning("TMDB has no confident title/year match for %r", q)
-                    return {"error": "TMDB title match not confident"}
 
-                chosen = chosen_entry[2]
+                if exact_year:
+                    chosen = exact_year[0][2]
+                elif exact and not year:
+                    chosen = exact[0][2]
+                elif not year and ranked:
+                    ranked.sort(key=lambda entry: (entry[0], int(entry[2].get("vote_count") or 0)), reverse=True)
+                    chosen = ranked[0][2] if ranked[0][0] >= 0.92 else None
+                else:
+                    ranked.sort(key=lambda entry: (entry[1], entry[0]), reverse=True)
+                    chosen = ranked[0][2] if ranked and ranked[0][1] and ranked[0][0] >= 0.92 else None
+
+                if not chosen:
+                    logger.warning("TMDB refused an uncertain title/year match for %r", raw_query)
+                    return {"error": "No confident TMDB title/year match"}
+
+                media_type = chosen.get("media_type")
+                tmdb_id = chosen.get("id")
                 logger.info(
-                    "TMDB accepted title %r year %s for query %r",
+                    "TMDB matched %r (%s) for %r",
                     chosen.get("title") or chosen.get("name"),
                     chosen.get("release_date") or chosen.get("first_air_date"),
-                    q
+                    raw_query
                 )
-                media_type, tmdb_id = chosen["media_type"], chosen["id"]
 
             if not tmdb_id or not media_type:
-                return {"error": f"TMDB id not found for '{q}'"}
+                return {"error": f"TMDB id not found for {raw_query}"}
 
-            extra = "credits,images,external_ids," + ("release_dates" if media_type == "movie" else "content_ratings")
-            data = await _tmdb_get(session, f"/{media_type}/{tmdb_id}",
-                                   append_to_response=extra,
-                                   include_image_language="en,null,hi")
+            append = "credits,images,external_ids"
+            append += ",release_dates" if media_type == "movie" else ",content_ratings"
+            data = await _tmdb_get(
+                session,
+                f"/{media_type}/{tmdb_id}",
+                append_to_response=append,
+                include_image_language="en,null,hi"
+            )
             if not data:
-                return {"error": f"TMDB details failed for id {tmdb_id}"}
-    except Exception as e:
-        logger.error(f"An error occurred in get_movie_detailsx: {e}")
-        return {"error": str(e)}
+                return {"error": f"TMDB details unavailable for {raw_query}"}
+
+            # Streaming availability is region-specific; use India as the bot's
+            # configured audience region. Only streaming/free/ad providers are listed.
+            watch_data = await _tmdb_get(session, f"/{media_type}/{tmdb_id}/watch/providers")
+    except Exception as error:
+        logger.exception("TMDB lookup failed for %r: %s", raw_query, error)
+        return {"error": str(error)}
 
     credits = data.get("credits") or {}
     crew = credits.get("crew") or []
-
-    def crew_of(*jobs):
-        return [c["name"] for c in crew if c.get("job") in jobs and c.get("name")]
-
     is_movie = media_type == "movie"
-    date = data.get("release_date") if is_movie else data.get("first_air_date")
-    year_val = int(date[:4]) if date and date[:4].isdigit() else None
-    runtime = data.get("runtime") if is_movie else (data.get("episode_run_time") or [None])[0]
+    release_date = data.get("release_date") if is_movie else data.get("first_air_date")
+    year_value = int(release_date[:4]) if release_date and release_date[:4].isdigit() else None
+    runtime_value = data.get("runtime") if is_movie else (data.get("episode_run_time") or [None])[0]
 
-    cert = None
-    try:
-        if is_movie:
-            for c in (data.get("release_dates") or {}).get("results", []):
-                if c.get("iso_3166_1") in ("IN", "US"):
-                    for r in c.get("release_dates", []):
-                        if r.get("certification"):
-                            cert = r["certification"]
-                            break
-                if cert:
-                    break
-        else:
-            for c in (data.get("content_ratings") or {}).get("results", []):
-                if c.get("iso_3166_1") in ("IN", "US") and c.get("rating"):
-                    cert = c["rating"]
-                    break
-    except Exception:
-        pass
+    spoken_languages = [
+        language.get("english_name") or language.get("name")
+        for language in data.get("spoken_languages", [])
+        if language.get("english_name") or language.get("name")
+    ]
 
-    lang = data.get("original_language")
+    providers = ((watch_data or {}).get("results") or {}).get("IN") or {}
+    ott_names = sorted({
+        provider.get("provider_name")
+        for category in ("flatrate", "free", "ads")
+        for provider in providers.get(category, [])
+        if provider.get("provider_name")
+    })
+
     images = data.get("images") or {}
-    poster_path = _pick_image(images.get("posters"), lang) or data.get("poster_path")
-    backdrop_path = _pick_image(images.get("backdrops"), lang) or data.get("backdrop_path")
+    language_code = data.get("original_language")
+    poster_path = _pick_image(images.get("posters"), language_code) or data.get("poster_path")
+    backdrop_path = _pick_image(images.get("backdrops"), language_code) or data.get("backdrop_path")
+
+    certification = None
+    if is_movie:
+        for country in (data.get("release_dates") or {}).get("results", []):
+            if country.get("iso_3166_1") == "IN":
+                certification = next(
+                    (entry.get("certification") for entry in country.get("release_dates", [])
+                     if entry.get("certification")),
+                    None
+                )
+                if certification:
+                    break
+    else:
+        certification = next(
+            (entry.get("rating") for entry in (data.get("content_ratings") or {}).get("results", [])
+             if entry.get("iso_3166_1") == "IN" and entry.get("rating")),
+            None
+        )
 
     return {
         "title": data.get("title") or data.get("name"),
         "localized_title": data.get("original_title") or data.get("original_name"),
-        "year": year_val,
-        "release_date": date,
+        "year": year_value,
+        "release_date": release_date,
         "rating": round(float(data["vote_average"]), 1) if data.get("vote_average") else None,
         "votes": int(data.get("vote_count") or 0),
-        "runtime": f"{runtime} min" if runtime else None,
-        "certificates": cert,
+        "runtime": f"{runtime_value} min" if runtime_value else None,
+        "certificates": certification,
         "tmdb_url": f"https://www.themoviedb.org/{media_type}/{tmdb_id}",
-        "genres": [g["name"] for g in data.get("genres", [])],
-        "languages": [l.get("english_name") or l.get("name") for l in data.get("spoken_languages", [])],
-        "countries": [c["name"] for c in data.get("production_countries", [])] if is_movie
-                     else list(data.get("origin_country") or []),
-        "director": crew_of("Director") if is_movie else [c["name"] for c in data.get("created_by", [])],
-        "writer": crew_of("Writer", "Screenplay", "Story"),
-        "producer": crew_of("Producer", "Executive Producer"),
-        "composer": crew_of("Original Music Composer", "Composer"),
-        "cinematographer": crew_of("Director of Photography"),
-        "cast": [c["name"] for c in (credits.get("cast") or [])[:10] if c.get("name")],
+        "genres": [genre.get("name") for genre in data.get("genres", []) if genre.get("name")],
+        "languages": spoken_languages,
+        "ott_platform": ", ".join(ott_names) if ott_names else None,
+        "countries": [country.get("name") for country in data.get("production_countries", []) if country.get("name")],
+        "director": [person.get("name") for person in crew if person.get("job") == "Director" and person.get("name")],
+        "writer": [person.get("name") for person in crew if person.get("job") in ("Writer", "Screenplay", "Story") and person.get("name")],
+        "cast": [person.get("name") for person in (credits.get("cast") or [])[:10] if person.get("name")],
         "plot": data.get("overview"),
         "tagline": data.get("tagline"),
-        "box_office": data.get("revenue") or None,
         "seasons": data.get("number_of_seasons"),
-        "distributors": [c["name"] for c in data.get("production_companies", [])],
         "imdb_id": (data.get("external_ids") or {}).get("imdb_id") or data.get("imdb_id"),
         "tmdb_id": tmdb_id,
         "poster_url": _img(poster_path),
-        "backdrop_url": _img(backdrop_path),
-    }
-, title)
-                if m:
-                    year = m.group(1)
-                    title = re.sub(r'\s*\(?[12]\d{3}\)?\s*
-                elif file:
-                    m = re.search(r'\b([12]\d{3})\b', file)
-                    if m:
-                        year = m.group(1)
-                if not title:
-                    title = q.lower()
-
-                res = await _tmdb_get(session, "/search/multi", query=title, include_adult="false")
-                results = [r for r in (res or {}).get("results", []) if r.get("media_type") in ("movie", "tv")]
-                if not results:
-                    return {"error": f"No TMDB result for '{q}'"}
-                def norm_title(value):
-                    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
-
-                target = norm_title(title)
-                ranked = []
-                for item in results:
-                    candidate_titles = [
-                        item.get("title"), item.get("name"),
-                        item.get("original_title"), item.get("original_name")
-                    ]
-                    score = max(
-                        (difflib.SequenceMatcher(None, target, norm_title(value)).ratio()
-                         for value in candidate_titles if value),
-                        default=0
-                    )
-                    date_value = item.get("release_date") or item.get("first_air_date") or ""
-                    item_year = date_value[:4] if len(date_value) >= 4 else ""
-                    ranked.append((score, item_year == str(year) if year else True, item))
-                ranked.sort(key=lambda entry: (entry[1], entry[0]), reverse=True)
-
-                exact = [
-                    entry for entry in ranked
-                    if any(norm_title(value) == target for value in (
-                        entry[2].get("title"), entry[2].get("name"),
-                        entry[2].get("original_title"), entry[2].get("original_name")
-                    ) if value)
-                ]
-                exact_year = [entry for entry in exact if entry[1]]
-                if exact_year:
-                    chosen_entry = exact_year[0]
-                elif exact:
-                    logger.warning("TMDB exact title found but year mismatch for %r (%s); refusing unrelated match", title, year)
-                    return {"error": "TMDB title year mismatch"}
-                elif ranked and ranked[0][0] >= 0.90 and ranked[0][1]:
-                    chosen_entry = ranked[0]
-                else:
-                    logger.warning("TMDB has no confident title/year match for %r", q)
-                    return {"error": "TMDB title match not confident"}
-
-                chosen = chosen_entry[2]
-                logger.info(
-                    "TMDB accepted title %r year %s for query %r",
-                    chosen.get("title") or chosen.get("name"),
-                    chosen.get("release_date") or chosen.get("first_air_date"),
-                    q
-                )
-                media_type, tmdb_id = chosen["media_type"], chosen["id"]
-
-            if not tmdb_id or not media_type:
-                return {"error": f"TMDB id not found for '{q}'"}
-
-            extra = "credits,images,external_ids," + ("release_dates" if media_type == "movie" else "content_ratings")
-            data = await _tmdb_get(session, f"/{media_type}/{tmdb_id}",
-                                   append_to_response=extra,
-                                   include_image_language="en,null,hi")
-            if not data:
-                return {"error": f"TMDB details failed for id {tmdb_id}"}
-    except Exception as e:
-        logger.error(f"An error occurred in get_movie_detailsx: {e}")
-        return {"error": str(e)}
-
-    credits = data.get("credits") or {}
-    crew = credits.get("crew") or []
-
-    def crew_of(*jobs):
-        return [c["name"] for c in crew if c.get("job") in jobs and c.get("name")]
-
-    is_movie = media_type == "movie"
-    date = data.get("release_date") if is_movie else data.get("first_air_date")
-    year_val = int(date[:4]) if date and date[:4].isdigit() else None
-    runtime = data.get("runtime") if is_movie else (data.get("episode_run_time") or [None])[0]
-
-    cert = None
-    try:
-        if is_movie:
-            for c in (data.get("release_dates") or {}).get("results", []):
-                if c.get("iso_3166_1") in ("IN", "US"):
-                    for r in c.get("release_dates", []):
-                        if r.get("certification"):
-                            cert = r["certification"]
-                            break
-                if cert:
-                    break
-        else:
-            for c in (data.get("content_ratings") or {}).get("results", []):
-                if c.get("iso_3166_1") in ("IN", "US") and c.get("rating"):
-                    cert = c["rating"]
-                    break
-    except Exception:
-        pass
-
-    lang = data.get("original_language")
-    images = data.get("images") or {}
-    poster_path = _pick_image(images.get("posters"), lang) or data.get("poster_path")
-    backdrop_path = _pick_image(images.get("backdrops"), lang) or data.get("backdrop_path")
-
-    return {
-        "title": data.get("title") or data.get("name"),
-        "localized_title": data.get("original_title") or data.get("original_name"),
-        "year": year_val,
-        "release_date": date,
-        "rating": round(float(data["vote_average"]), 1) if data.get("vote_average") else None,
-        "votes": int(data.get("vote_count") or 0),
-        "runtime": f"{runtime} min" if runtime else None,
-        "certificates": cert,
-        "tmdb_url": f"https://www.themoviedb.org/{media_type}/{tmdb_id}",
-        "genres": [g["name"] for g in data.get("genres", [])],
-        "languages": [l.get("english_name") or l.get("name") for l in data.get("spoken_languages", [])],
-        "countries": [c["name"] for c in data.get("production_countries", [])] if is_movie
-                     else list(data.get("origin_country") or []),
-        "director": crew_of("Director") if is_movie else [c["name"] for c in data.get("created_by", [])],
-        "writer": crew_of("Writer", "Screenplay", "Story"),
-        "producer": crew_of("Producer", "Executive Producer"),
-        "composer": crew_of("Original Music Composer", "Composer"),
-        "cinematographer": crew_of("Director of Photography"),
-        "cast": [c["name"] for c in (credits.get("cast") or [])[:10] if c.get("name")],
-        "plot": data.get("overview"),
-        "tagline": data.get("tagline"),
-        "box_office": data.get("revenue") or None,
-        "seasons": data.get("number_of_seasons"),
-        "distributors": [c["name"] for c in data.get("production_companies", [])],
-        "imdb_id": (data.get("external_ids") or {}).get("imdb_id") or data.get("imdb_id"),
-        "tmdb_id": tmdb_id,
-        "poster_url": _img(poster_path),
-        "backdrop_url": _img(backdrop_path),
-    }
-, '', title).strip()
-                elif file:
-                    m = re.search(r'\b([12]\d{3})\b', file)
-                    if m:
-                        year = m.group(1)
-                if not title:
-                    title = q.lower()
-
-                res = await _tmdb_get(session, "/search/multi", query=title, include_adult="false")
-                results = [r for r in (res or {}).get("results", []) if r.get("media_type") in ("movie", "tv")]
-                if not results:
-                    return {"error": f"No TMDB result for '{q}'"}
-                def norm_title(value):
-                    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
-
-                target = norm_title(title)
-                ranked = []
-                for item in results:
-                    candidate_titles = [
-                        item.get("title"), item.get("name"),
-                        item.get("original_title"), item.get("original_name")
-                    ]
-                    score = max(
-                        (difflib.SequenceMatcher(None, target, norm_title(value)).ratio()
-                         for value in candidate_titles if value),
-                        default=0
-                    )
-                    date_value = item.get("release_date") or item.get("first_air_date") or ""
-                    item_year = date_value[:4] if len(date_value) >= 4 else ""
-                    ranked.append((score, item_year == str(year) if year else True, item))
-                ranked.sort(key=lambda entry: (entry[1], entry[0]), reverse=True)
-
-                exact = [
-                    entry for entry in ranked
-                    if any(norm_title(value) == target for value in (
-                        entry[2].get("title"), entry[2].get("name"),
-                        entry[2].get("original_title"), entry[2].get("original_name")
-                    ) if value)
-                ]
-                exact_year = [entry for entry in exact if entry[1]]
-                if exact_year:
-                    chosen_entry = exact_year[0]
-                elif exact:
-                    logger.warning("TMDB exact title found but year mismatch for %r (%s); refusing unrelated match", title, year)
-                    return {"error": "TMDB title year mismatch"}
-                elif ranked and ranked[0][0] >= 0.90 and ranked[0][1]:
-                    chosen_entry = ranked[0]
-                else:
-                    logger.warning("TMDB has no confident title/year match for %r", q)
-                    return {"error": "TMDB title match not confident"}
-
-                chosen = chosen_entry[2]
-                logger.info(
-                    "TMDB accepted title %r year %s for query %r",
-                    chosen.get("title") or chosen.get("name"),
-                    chosen.get("release_date") or chosen.get("first_air_date"),
-                    q
-                )
-                media_type, tmdb_id = chosen["media_type"], chosen["id"]
-
-            if not tmdb_id or not media_type:
-                return {"error": f"TMDB id not found for '{q}'"}
-
-            extra = "credits,images,external_ids," + ("release_dates" if media_type == "movie" else "content_ratings")
-            data = await _tmdb_get(session, f"/{media_type}/{tmdb_id}",
-                                   append_to_response=extra,
-                                   include_image_language="en,null,hi")
-            if not data:
-                return {"error": f"TMDB details failed for id {tmdb_id}"}
-    except Exception as e:
-        logger.error(f"An error occurred in get_movie_detailsx: {e}")
-        return {"error": str(e)}
-
-    credits = data.get("credits") or {}
-    crew = credits.get("crew") or []
-
-    def crew_of(*jobs):
-        return [c["name"] for c in crew if c.get("job") in jobs and c.get("name")]
-
-    is_movie = media_type == "movie"
-    date = data.get("release_date") if is_movie else data.get("first_air_date")
-    year_val = int(date[:4]) if date and date[:4].isdigit() else None
-    runtime = data.get("runtime") if is_movie else (data.get("episode_run_time") or [None])[0]
-
-    cert = None
-    try:
-        if is_movie:
-            for c in (data.get("release_dates") or {}).get("results", []):
-                if c.get("iso_3166_1") in ("IN", "US"):
-                    for r in c.get("release_dates", []):
-                        if r.get("certification"):
-                            cert = r["certification"]
-                            break
-                if cert:
-                    break
-        else:
-            for c in (data.get("content_ratings") or {}).get("results", []):
-                if c.get("iso_3166_1") in ("IN", "US") and c.get("rating"):
-                    cert = c["rating"]
-                    break
-    except Exception:
-        pass
-
-    lang = data.get("original_language")
-    images = data.get("images") or {}
-    poster_path = _pick_image(images.get("posters"), lang) or data.get("poster_path")
-    backdrop_path = _pick_image(images.get("backdrops"), lang) or data.get("backdrop_path")
-
-    return {
-        "title": data.get("title") or data.get("name"),
-        "localized_title": data.get("original_title") or data.get("original_name"),
-        "year": year_val,
-        "release_date": date,
-        "rating": round(float(data["vote_average"]), 1) if data.get("vote_average") else None,
-        "votes": int(data.get("vote_count") or 0),
-        "runtime": f"{runtime} min" if runtime else None,
-        "certificates": cert,
-        "tmdb_url": f"https://www.themoviedb.org/{media_type}/{tmdb_id}",
-        "genres": [g["name"] for g in data.get("genres", [])],
-        "languages": [l.get("english_name") or l.get("name") for l in data.get("spoken_languages", [])],
-        "countries": [c["name"] for c in data.get("production_countries", [])] if is_movie
-                     else list(data.get("origin_country") or []),
-        "director": crew_of("Director") if is_movie else [c["name"] for c in data.get("created_by", [])],
-        "writer": crew_of("Writer", "Screenplay", "Story"),
-        "producer": crew_of("Producer", "Executive Producer"),
-        "composer": crew_of("Original Music Composer", "Composer"),
-        "cinematographer": crew_of("Director of Photography"),
-        "cast": [c["name"] for c in (credits.get("cast") or [])[:10] if c.get("name")],
-        "plot": data.get("overview"),
-        "tagline": data.get("tagline"),
-        "box_office": data.get("revenue") or None,
-        "seasons": data.get("number_of_seasons"),
-        "distributors": [c["name"] for c in data.get("production_companies", [])],
-        "imdb_id": (data.get("external_ids") or {}).get("imdb_id") or data.get("imdb_id"),
-        "tmdb_id": tmdb_id,
-        "poster_url": _img(poster_path),
-        "backdrop_url": _img(backdrop_path),
+        "backdrop_url": _img(backdrop_path)
     }
