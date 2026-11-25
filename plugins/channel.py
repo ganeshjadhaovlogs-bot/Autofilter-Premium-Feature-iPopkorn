@@ -502,8 +502,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 # applied by editing that same post below.
         schedule_update(bot, base_name)
 
-async def set_red_get_files_button(message_id, base_name):
-    """Apply Telegram Bot API 9.4 red styling without relying on Pyrofork's button model."""
+async def set_red_get_files_button(message_id, base_name, retries=3):
+    """Re-apply Telegram's red button style after every announcement send/edit."""
     if not BOT_TOKEN or not message_id:
         logger.warning("Cannot apply red GET FILES button style: BOT_TOKEN/message_id missing.")
         return False
@@ -516,29 +516,52 @@ async def set_red_get_files_button(message_id, base_name):
         }]]
     }
     api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageReplyMarkup"
-    try:
-        timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                api_url,
-                json={
-                    "chat_id": MOVIE_UPDATE_CHANNEL,
-                    "message_id": message_id,
-                    "reply_markup": reply_markup
-                }
-            ) as response:
-                result = await response.json(content_type=None)
-                if response.status == 200 and result.get("ok"):
-                    logger.info("Red GET FILES button applied to announcement %s", message_id)
-                    return True
-                logger.warning(
-                    "Telegram rejected red GET FILES button for %s: HTTP %s - %s",
-                    message_id, response.status, result
-                )
-    except Exception:
-        logger.exception("Could not apply red GET FILES button to announcement %s", message_id)
+    timeout = aiohttp.ClientTimeout(total=15)
+
+    for attempt in range(1, retries + 1):
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    api_url,
+                    json={
+                        "chat_id": MOVIE_UPDATE_CHANNEL,
+                        "message_id": message_id,
+                        "reply_markup": reply_markup
+                    }
+                ) as response:
+                    result = await response.json(content_type=None)
+                    description = str(result.get("description", "")).lower()
+
+                    if response.status == 200 and result.get("ok"):
+                        logger.info("Red GET FILES button confirmed on announcement %s", message_id)
+                        return True
+
+                    # Telegram returns this when the exact same red keyboard is already set.
+                    if "message is not modified" in description:
+                        logger.info("Red GET FILES button already active on announcement %s", message_id)
+                        return True
+
+                    logger.warning(
+                        "Red GET FILES attempt %s/%s failed for %s: HTTP %s - %s",
+                        attempt, retries, message_id, response.status, result
+                    )
+        except Exception:
+            logger.exception(
+                "Red GET FILES attempt %s/%s raised an error for announcement %s",
+                attempt, retries, message_id
+            )
+
+        if attempt < retries:
+            await asyncio.sleep(attempt * 2)
+
+    logger.error("Could not confirm red GET FILES button after %s attempts for %s", retries, message_id)
     return False
 
+
+async def reapply_red_get_files_button_later(message_id, base_name):
+    """Second pass catches a later keyboard overwrite from a closely timed edit."""
+    await asyncio.sleep(2)
+    await set_red_get_files_button(message_id, base_name)
 
 async def send_movie_update(bot, base_name):
     max_retries = 3
@@ -607,6 +630,7 @@ async def send_movie_update(bot, base_name):
                 {"$set": {"message_id": msg.id, "is_photo": is_photo}}
             )
             await set_red_get_files_button(msg.id, base_name)
+            asyncio.create_task(reapply_red_get_files_button_later(msg.id, base_name))
             return msg
         except FloodWait as e:
             wait_time = e.value + 2
@@ -671,6 +695,7 @@ async def update_movie_message(bot, base_name):
                     reply_markup=buttons
                 )
                 await set_red_get_files_button(message_id, base_name)
+                asyncio.create_task(reapply_red_get_files_button_later(message_id, base_name))
             else:
                 # Telegram cannot turn a text message into a photo by editing it.
                 # Upgrade legacy text-only announcements by sending the photo first,
@@ -704,11 +729,13 @@ async def update_movie_message(bot, base_name):
                     {"$set": {"message_id": new_msg.id, "is_photo": True}}
                 )
                 await set_red_get_files_button(new_msg.id, base_name)
+                asyncio.create_task(reapply_red_get_files_button_later(new_msg.id, base_name))
                 # Keep the old text-only announcement in channel history.
                 # The database now points to the new photo announcement.
             return
         except MessageNotModified:
             await set_red_get_files_button(message_id, base_name)
+            asyncio.create_task(reapply_red_get_files_button_later(message_id, base_name))
             return
         except MessageIdInvalid:
             logger.warning(
