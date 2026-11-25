@@ -160,11 +160,7 @@ async def start(client, message):
         return 
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
-        # User registration must not depend on the optional log channel.
-        try:
-            await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
-        except Exception as e:
-            logger.warning(f"Could not send new-user log to LOG_CHANNEL ({LOG_CHANNEL}): {type(e).__name__}: {e}")
+        await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
     if len(message.command) != 2:
         buttons = [[
                     InlineKeyboardButton(' ⌣🍒ᴄʜᴀɴɴᴇʟs ', callback_data='channel'),
@@ -194,22 +190,12 @@ async def start(client, message):
         m=await message.reply_text("⏳")
         await asyncio.sleep(0.4)
         await m.delete()        
-        start_caption = script.START_TXT.format(message.from_user.mention, gtxt, temp.U_NAME, temp.B_NAME)
-        try:
-            await message.reply_photo(
-                photo=random.choice(PICS),
-                caption=start_caption,
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML
-            )
-        except Exception as e:
-            logger.warning(f"Start menu photo failed, sending text instead: {type(e).__name__}: {e}")
-            await message.reply_text(
-                start_caption,
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML,
-                disable_web_page_preview=True
-            )
+        await message.reply_photo(
+            photo=random.choice(PICS),
+            caption=script.START_TXT.format(message.from_user.mention, gtxt, temp.U_NAME, temp.B_NAME),
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML
+        )
         return
 
     if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
@@ -319,56 +305,47 @@ async def start(client, message):
     except:
         _, grp_id, file_id = "", 0, data
 
-    # Force-join is mandatory for ALL users, including premium users.
-    # Premium only bypasses verification and daily limits, never channel membership.
-    try:
-        btn = []
-        chat = int(data.split("_", 2)[1])
-        settings = await get_settings(chat)
-        fsub_channels = list(dict.fromkeys(
-            (settings.get('fsub', []) if settings else []) + AUTH_CHANNELS
-        ))
-
-        if not fsub_channels and not AUTH_REQ_CHANNELS:
-            logger.error("Force Join blocked file delivery: no required channels are configured.")
-            await message.reply_text("⚠️ Required channel is not configured. Please contact the bot admin.")
-            return
-
-        if fsub_channels:
-            btn += await is_subscribed(client, message.from_user.id, fsub_channels)
-        if AUTH_REQ_CHANNELS:
-            btn += await is_req_subscribed(client, message.from_user.id, AUTH_REQ_CHANNELS)
-
-        if btn:
-            if len(message.command) > 1 and "_" in message.command[1]:
-                kk, file_id = message.command[1].split("_", 1)
-                btn.append([
-                    InlineKeyboardButton("♻️ ᴛʀʏ ᴀɢᴀɪɴ ♻️", callback_data=f"checksub#{kk}#{file_id}")
-                ])
-            reply_markup = InlineKeyboardMarkup(btn)
-            photo = random.choice(FSUB_PICS) if FSUB_PICS else "https://graph.org/file/7478ff3eac37f4329c3d8.jpg"
-            caption = (
-                f"👋 ʜᴇʟʟᴏ {message.from_user.mention}\n\n"
-                "🛑 ʏᴏᴜ ᴍᴜsᴛ ᴊᴏɪɴ ᴛʜᴇ ʀᴇǫᴜɪʀᴇᴅ ᴄʜᴀɴɴᴇʟs ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ.\n"
-                "👉 ᴊᴏɪɴ ᴀʟʟ ᴛʜᴇ ʙᴇʟᴏᴡ ᴄʜᴀɴɴᴇʟs ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ."
-            )
-            await message.reply_photo(
-                photo=photo,
-                caption=caption,
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML
-            )
-            return
-    except Exception as e:
-        await log_error(client, f"❗️ Force Sub Error:\n\n{repr(e)}")
-        logger.error(f"❗️ Force Sub Error:\n\n{repr(e)}")
-        # Fail closed: never deliver a file when force-join validation fails.
-        await message.reply_text("⚠️ Channel verification failed. Please try again shortly.")
-        return
-
-    # Fetch file details only after force-join validation.
+    # Fetch file details concurrently with user checks
     file_details_task = asyncio.create_task(get_file_details(file_id))
     is_premium = await db.has_premium_access(message.from_user.id)
+
+    if not is_premium:
+        try:
+            btn = []
+            chat = int(data.split("_", 2)[1])
+            settings      = await get_settings(chat)
+            fsub_channels = list(dict.fromkeys((settings.get('fsub', []) if settings else [])+ AUTH_CHANNELS)) 
+
+            if fsub_channels:
+                btn += await is_subscribed(client, message.from_user.id, fsub_channels)
+            if AUTH_REQ_CHANNELS:
+                btn += await is_req_subscribed(client, message.from_user.id, AUTH_REQ_CHANNELS)
+            if btn:
+                reply_markup = InlineKeyboardMarkup(btn)
+                if len(message.command) > 1 and "_" in message.command[1]:
+                    kk, file_id = message.command[1].split("_", 1)
+                    btn.append([
+                        InlineKeyboardButton("♻️ ᴛʀʏ ᴀɢᴀɪɴ ♻️", callback_data=f"checksub#{kk}#{file_id}")
+                    ])
+                    reply_markup = InlineKeyboardMarkup(btn)
+                photo = random.choice(FSUB_PICS) if FSUB_PICS else "https://graph.org/file/7478ff3eac37f4329c3d8.jpg"
+                caption = (
+                    f"👋 ʜᴇʟʟᴏ {message.from_user.mention}\n\n"
+                    "🛑 ʏᴏᴜ ᴍᴜsᴛ ᴊᴏɪɴ ᴛʜᴇ ʀᴇǫᴜɪʀᴇᴅ ᴄʜᴀɴɴᴇʟs ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ.\n"
+                    "👉 ᴊᴏɪɴ ᴀʟʟ ᴛʜᴇ ʙᴇʟᴏᴡ ᴄʜᴀɴɴᴇʟs ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ."
+                )
+                await message.reply_photo(
+                    photo=photo,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                    parse_mode=enums.ParseMode.HTML
+                )
+                return
+
+        except Exception as e:
+            await log_error(client, f"❗️ Force Sub Error:\n\n{repr(e)}")
+            logger.error(f"❗️ Force Sub Error:\n\n{repr(e)}")
+
 
     user_id = m.from_user.id
     # just_verified: user came back from the shortlink -> deliver the requested file,
