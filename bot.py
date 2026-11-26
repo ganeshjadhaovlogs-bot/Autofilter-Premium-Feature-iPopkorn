@@ -70,13 +70,6 @@ async def roaroicbot_start():
         print("Multiple Database Mode On. Now Files Will Be Save In Second DB If First DB Is Full")
     else:
         print("Single DB Mode On ! Files Will Be Save In First Database")
-    # Remove stale movie announcements left behind when all matching files
-    # were deleted before the cleanup logic was made reliable.
-    try:
-        from plugins.channel import cleanup_stale_movie_updates
-        await cleanup_stale_movie_updates(roaroicbot)
-    except Exception:
-        logging.exception("Could not reconcile stale movie channel announcements at startup")
     me = await roaroicbot.get_me()
     temp.ME = me.id
     temp.U_NAME = me.username
