@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from plugins.Roaroicfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
-from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS, BOT_TOKEN
+from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS, BOT_TOKEN, MULTIPLE_DB
 from Script import script
 from database.ia_filterdb import save_file, Media, Media2
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
@@ -806,9 +806,11 @@ async def _get_existing_movie_file_keys(movie_files):
 
     query = {"file_name": {"$in": list(candidate_keys)}}
     existing_keys = set()
-    # Search both databases even when the primary database is currently active:
-    # older files may have been stored in the secondary database.
-    for collection in (Media.collection, Media2.collection):
+    # Only query the secondary database when multiple-DB mode is enabled.
+    collections = [Media.collection]
+    if MULTIPLE_DB:
+        collections.append(Media2.collection)
+    for collection in collections:
         cursor = collection.find(query, {"file_name": 1})
         async for record in cursor:
             key = _movie_file_key(record.get("file_name"))
