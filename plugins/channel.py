@@ -1065,6 +1065,29 @@ async def refresh_all_movie_metadata(bot, message):
 
     checked = updated = posted = failed = post_failed = 0
     stopped = False
+    refresh_state = db.db["movie_refresh_state"]
+    saved_state = await refresh_state.find_one({"_id": "metadata_refresh"})
+    last_id = (
+        saved_state.get("last_id")
+        if saved_state and not saved_state.get("completed")
+        else None
+    )
+    resume_query = {"_id": {"$gt": last_id}} if last_id else {}
+    if last_id:
+        await status.edit_text(
+            f"<b>⏯️ Refresh saved position se resume ho raha hai...\\nLast completed: {last_id}</b>"
+        )
+    else:
+        await status.edit_text(
+            "<b>🔄 IMDb/TMDB se purani movies ki details aur posters refresh ho rahe hain...</b>"
+        )
+
+    async def save_refresh_checkpoint(movie_id):
+        await refresh_state.update_one(
+            {"_id": "metadata_refresh"},
+            {"$set": {"last_id": movie_id, "completed": False}},
+            upsert=True
+        )
 
     def has_value(value):
         return value not in (None, "", [], {}, "N/A", "n/a")
@@ -1073,7 +1096,7 @@ async def refresh_all_movie_metadata(bot, message):
         return next((value for value in values if has_value(value)), None)
 
     try:
-        async for movie_doc in db.movie_updates.find({}):
+        async for movie_doc in db.movie_updates.find(resume_query).sort("_id", 1):
             if refresh_stop_requested:
                 stopped = True
                 break
@@ -1180,6 +1203,7 @@ async def refresh_all_movie_metadata(bot, message):
                 if not has_fresh_metadata:
                     failed += 1
                     logger.warning("No fresh IMDb/TMDB metadata found for %s; keeping saved data", base_name)
+                    await save_refresh_checkpoint(base_name)
                     await asyncio.sleep(1)
                     continue
 
@@ -1235,6 +1259,8 @@ async def refresh_all_movie_metadata(bot, message):
                         base_name
                     )
 
+                await save_refresh_checkpoint(base_name)
+
                 if refresh_stop_requested:
                     stopped = True
                     break
@@ -1242,9 +1268,20 @@ async def refresh_all_movie_metadata(bot, message):
             except Exception:
                 failed += 1
                 logger.exception("Metadata refresh failed for %s", base_name)
+                # Mark this item as attempted so a later resume continues
+                # forward instead of getting stuck on one bad metadata record.
+                if base_name:
+                    await save_refresh_checkpoint(base_name)
 
         if refresh_stop_requested:
             stopped = True
+
+        if not stopped:
+            await refresh_state.update_one(
+                {"_id": "metadata_refresh"},
+                {"$set": {"last_id": None, "completed": True}},
+                upsert=True
+            )
 
         result_title = "⏹️ Refresh stopped." if stopped else "✅ Refresh complete!"
         await status.edit_text(
