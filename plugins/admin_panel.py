@@ -36,6 +36,7 @@ import io
 import logging
 import os
 import platform
+import re
 import sys
 import time
 
@@ -48,7 +49,7 @@ from pyrogram.errors import (
 )
 from pyrogram.types import InlineKeyboardButton as B, InlineKeyboardMarkup as KB
 
-from info import ADMINS, MULTIPLE_DB
+from info import ADMINS, MULTIPLE_DB, COLLECTION_NAME
 from database.users_chats_db import db
 from database.ia_filterdb import Media, Media2, db as media_db, db2 as media_db2
 from utils import temp, get_size, get_readable_time
@@ -945,6 +946,97 @@ async def run_broadcast(bot, status_msg, src):
             f"<b>{'⏹ ʙʀᴏᴀᴅᴄᴀꜱᴛ ꜱᴛᴏᴘᴘᴇᴅ' if BC['cancel'] else '✅ ʙʀᴏᴀᴅᴄᴀꜱᴛ ꜰɪɴɪꜱʜᴇᴅ'}</b>\n\n"
             f"✅ ᴅᴇʟɪᴠᴇʀᴇᴅ : <code>{ok}</code>\n🚫 ʙʟᴏᴄᴋᴇᴅ/ᴅᴇʟᴇᴛᴇᴅ : <code>{blocked}</code>\n"
             f"❌ ꜰᴀɪʟᴇᴅ : <code>{failed}</code>", parse_mode=HTML)
+
+
+# ----------------------------------------------------- duplicate cleanup ---
+_DUP_QUALITY_RE = re.compile(r"(?<![a-z0-9])(2160p|1440p|1080p|720p|480p|360p|8k|4k|org)(?![a-z0-9])", re.I)
+_DUP_EPISODE_RE = re.compile(
+    r"\b(?:s(?:eason)?\s*(\d{1,2})\s*e(?:p(?:isode)?)?\s*(\d{1,3})|"
+    r"season\s*(\d{1,2})\s*episode\s*(\d{1,3}))\b", re.I
+)
+
+
+def _duplicate_text(value):
+    value = html.unescape(re.sub(r"<[^>]*>", " ", str(value or "")))
+    return " ".join(value.casefold().split())
+
+
+def _duplicate_key(doc):
+    """Only match records with the same caption, quality and known duration."""
+    caption = _duplicate_text(doc.get("caption"))
+    duration = doc.get("duration")
+    filename = str(doc.get("file_name") or "")
+    quality_match = _DUP_QUALITY_RE.search(filename)
+    if not caption or not duration or not quality_match:
+        return None
+
+    quality = quality_match.group(1).casefold()
+    # Keep episode identity in the key so S01E02 can never collide with S01E03.
+    episode_match = _DUP_EPISODE_RE.search(filename)
+    episode = ""
+    if episode_match:
+        groups = [g for g in episode_match.groups() if g]
+        episode = "s{}e{}".format(int(groups[0]), int(groups[1]))
+
+    title = _DUP_QUALITY_RE.sub(" ", filename.casefold())
+    title = re.sub(r"\b(x264|x265|h264|h265|hevc|aac|hdrip|webrip|webdl|web-dl|bluray|blu-ray|mkv|mp4)\b", " ", title)
+    title = " ".join(title.split())
+    if not title:
+        return None
+    return (title, episode, caption, quality, int(duration))
+
+
+@Client.on_message(filters.private & filters.command("removeduplicates") & filters.user(ADMINS))
+async def remove_duplicate_files_cmd(bot, message):
+    status = await message.reply_text(
+        "<b>🔎 ᴅᴜᴘʟɪᴄᴀᴛᴇ ꜰɪʟᴇs sᴄᴀɴɴɪɴɢ…</b>", parse_mode=HTML
+    )
+    collections = [("DB 1", Media.collection)]
+    if MULTIPLE_DB:
+        collections.append(("DB 2", Media2.collection))
+
+    groups = {}
+    scanned = skipped = deleted = 0
+    try:
+        for db_label, collection in collections:
+            async for doc in collection.find(
+                {}, {"_id": 1, "file_name": 1, "file_size": 1, "caption": 1, "duration": 1}
+            ):
+                scanned += 1
+                key = _duplicate_key(doc)
+                if key is None:
+                    skipped += 1
+                    continue
+                entry = (collection, doc["_id"], int(doc.get("file_size") or 0), db_label)
+                current = groups.get(key)
+                if current is None:
+                    groups[key] = entry
+                    continue
+
+                # Retain the larger file when two otherwise identical records exist.
+                if entry[2] > current[2]:
+                    remove = current
+                    groups[key] = entry
+                else:
+                    remove = entry
+                result = await remove[0].delete_one({"_id": remove[1]})
+                deleted += result.deleted_count
+
+        await status.edit_text(
+            "<b>✅ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ᴄᴏᴍᴘʟᴇᴛᴇ</b>\n\n"
+            f"📁 ꜱᴄᴀɴɴᴇᴅ : <code>{scanned}</code>\n"
+            f"🗑 ᴅᴜᴘʟɪᴄᴀᴛᴇs ᴅᴇʟᴇᴛᴇᴅ : <code>{deleted}</code>\n"
+            f"⏭ ɴᴏᴛ ᴄᴏᴍᴘᴀʀᴇᴅ (ᴍɪssɪɴɢ ᴄᴀᴘᴛɪᴏɴ/ǫᴜᴀʟɪᴛʏ/ᴅᴜʀᴀᴛɪᴏɴ) : <code>{skipped}</code>\n\n"
+            "🔒 ᴅɪꜰꜰᴇʀᴇɴᴛ ᴇᴘɪsᴏᴅᴇs ᴀɴᴅ ᴅᴜʀᴀᴛɪᴏɴs ᴡᴇʀᴇ ᴋᴇᴘᴛ.",
+            parse_mode=HTML
+        )
+    except Exception:
+        logger.exception("Duplicate cleanup failed")
+        await status.edit_text(
+            "<b>⚠️ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ꜰᴀɪʟᴇᴅ.</b>\nᴄʜᴇᴄᴋ ʀᴇɴᴅᴇʀ ʟᴏɢs.",
+            parse_mode=HTML
+        )
+
 
 
 # ------------------------------------------------ admin message routing ----
