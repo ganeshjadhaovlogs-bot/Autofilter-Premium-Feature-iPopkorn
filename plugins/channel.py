@@ -640,8 +640,7 @@ async def send_movie_update(bot, base_name):
                 photo=resized_poster,
                 caption=text,
                 reply_markup=buttons,
-                parse_mode=enums.ParseMode.HTML,
-                has_spoiler=True
+                parse_mode=enums.ParseMode.HTML
             )
             is_photo = True
 
@@ -706,8 +705,7 @@ async def update_movie_message(bot, base_name):
                 media = InputMediaPhoto(
                     media=resized_poster,
                     caption=text,
-                    parse_mode=enums.ParseMode.HTML,
-                    has_spoiler=True
+                    parse_mode=enums.ParseMode.HTML
                 )
                 await bot.edit_message_media(
                     chat_id=MOVIE_UPDATE_CHANNEL,
@@ -743,8 +741,7 @@ async def update_movie_message(bot, base_name):
                     photo=resized_poster,
                     caption=text,
                     reply_markup=buttons,
-                    parse_mode=enums.ParseMode.HTML,
-                    has_spoiler=True
+                    parse_mode=enums.ParseMode.HTML
                 )
                 await db.movie_updates.update_one(
                     {"_id": base_name},
