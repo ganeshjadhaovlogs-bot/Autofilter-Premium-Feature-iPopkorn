@@ -785,8 +785,13 @@ async def update_movie_message(bot, base_name):
 
 
 def _movie_file_key(value):
-    """Normalize indexed and announcement filenames to the same comparison key."""
-    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+    """Mirror save_file() filename normalization for exact database comparisons."""
+    value = re.sub(
+        r"[_\\-\\.#+$%^&*()!~`,;:\\"'?/< >\\[\\]{}=|\\\\]",
+        " ",
+        str(value or "")
+    )
+    return re.sub(r"\\s+", " ", value).strip().lower()
 
 
 async def _get_existing_movie_file_keys(movie_files):
