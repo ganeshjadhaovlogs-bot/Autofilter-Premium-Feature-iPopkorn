@@ -13,9 +13,9 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from plugins.Roaroicfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
-from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS, BOT_TOKEN, MULTIPLE_DB
+from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS, BOT_TOKEN
 from Script import script
-from database.ia_filterdb import save_file, Media, Media2
+from database.ia_filterdb import save_file
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from utils import temp
 from pymongo.errors import PyMongoError, DuplicateKeyError
@@ -640,8 +640,7 @@ async def send_movie_update(bot, base_name):
                 photo=resized_poster,
                 caption=text,
                 reply_markup=buttons,
-                parse_mode=enums.ParseMode.HTML,
-                has_spoiler=True
+                parse_mode=enums.ParseMode.HTML
             )
             is_photo = True
 
@@ -706,8 +705,7 @@ async def update_movie_message(bot, base_name):
                 media = InputMediaPhoto(
                     media=resized_poster,
                     caption=text,
-                    parse_mode=enums.ParseMode.HTML,
-                    has_spoiler=True
+                    parse_mode=enums.ParseMode.HTML
                 )
                 await bot.edit_message_media(
                     chat_id=MOVIE_UPDATE_CHANNEL,
@@ -743,8 +741,7 @@ async def update_movie_message(bot, base_name):
                     photo=resized_poster,
                     caption=text,
                     reply_markup=buttons,
-                    parse_mode=enums.ParseMode.HTML,
-                    has_spoiler=True
+                    parse_mode=enums.ParseMode.HTML
                 )
                 await db.movie_updates.update_one(
                     {"_id": base_name},
@@ -784,148 +781,32 @@ async def update_movie_message(bot, base_name):
         logger.error(f"Failed to update movie message: {e}")
 
 
-def _movie_file_key(value):
-    """Mirror save_file() filename normalization for exact database comparisons."""
-    value = re.sub(
-        r"""[_\-\.#+$%^&*()!~`,;:"'?/< >\[\]{}=|\\]""",
-        " ",
-        str(value or "")
-    )
-    return re.sub(r"\s+", " ", value).strip().lower()
-
-async def _get_existing_movie_file_keys(movie_files):
-    """Return which announcement filenames still exist in either file database."""
-    candidate_keys = {
-        _movie_file_key(item.get("filename"))
-        for item in movie_files
-        if item.get("filename")
-    }
-    candidate_keys.discard("")
-    if not candidate_keys:
-        return set()
-
-    query = {"file_name": {"$in": list(candidate_keys)}}
-    existing_keys = set()
-    # Only query the secondary database when multiple-DB mode is enabled.
-    collections = [Media.collection]
-    if MULTIPLE_DB:
-        collections.append(Media2.collection)
-    for collection in collections:
-        cursor = collection.find(query, {"file_name": 1})
-        async for record in cursor:
-            key = _movie_file_key(record.get("file_name"))
-            if key:
-                existing_keys.add(key)
-    return existing_keys
-
-
-async def _delete_movie_announcement(bot, movie_doc):
-    """Delete the tracked Telegram post before removing its tracking record."""
-    base_name = movie_doc["_id"]
-    message_id = movie_doc.get("message_id")
-    if message_id:
-        try:
-            await bot.delete_messages(
-                chat_id=MOVIE_UPDATE_CHANNEL,
-                message_ids=[message_id]
-            )
-        except MessageIdInvalid:
-            pass
-        except Exception:
-            logger.exception(
-                "Could not delete channel announcement for %s", base_name
-            )
-            return False
-
-    await db.movie_updates.delete_one({"_id": base_name})
-    logger.info("Deleted empty movie announcement and tracking record: %s", base_name)
-    return True
-
-
-async def cleanup_stale_movie_updates(bot):
-    """At startup, remove announcements whose every indexed file was deleted."""
-    if not hasattr(db, "movie_updates"):
-        db.movie_updates = db.db.movie_updates
-
-    checked = removed = refreshed = 0
-    async for movie_doc in db.movie_updates.find({}):
-        checked += 1
-        base_name = movie_doc.get("_id")
-        movie_files = movie_doc.get("files", [])
-        try:
-            existing_keys = await _get_existing_movie_file_keys(movie_files)
-        except Exception:
-            logger.exception(
-                "Could not verify indexed files for movie announcement %s; leaving it untouched.",
-                base_name
-            )
-            continue
-
-        remaining_files = [
-            item for item in movie_files
-            if _movie_file_key(item.get("filename")) in existing_keys
-        ]
-        if len(remaining_files) == len(movie_files) and remaining_files:
-            continue
-
-        pending = pending_updates.pop(base_name, None)
-        if pending and not pending.cancelled():
-            pending.cancel()
-
-        if remaining_files:
-            await db.movie_updates.update_one(
-                {"_id": base_name},
-                {"$set": {"files": remaining_files}}
-            )
-            await update_movie_message(bot, base_name)
-            refreshed += 1
-            logger.info("Reconciled remaining indexed files for %s", base_name)
-        elif await _delete_movie_announcement(bot, movie_doc):
-            removed += 1
-
-    logger.info(
-        "Movie announcement startup cleanup complete: checked=%s refreshed=%s removed=%s",
-        checked, refreshed, removed
-    )
-
-
 async def sync_movie_updates_after_file_delete(bot, deleted_filenames):
-    """Reconcile movie announcements against files actually remaining in both DBs."""
-    if not hasattr(db, "movie_updates"):
-        db.movie_updates = db.db.movie_updates
-
+    """Remove deleted database files from movie announcements and clean empty posts."""
     deleted_keys = {
-        _movie_file_key(name) for name in deleted_filenames if name
+        re.sub(r"[^a-z0-9]+", " ", str(name).lower()).strip()
+        for name in deleted_filenames if name
     }
     if not deleted_keys:
         return
 
     async for movie_doc in db.movie_updates.find({}):
-        base_name = movie_doc["_id"]
         movie_files = movie_doc.get("files", [])
-        if not any(
-            _movie_file_key(item.get("filename")) in deleted_keys
-            for item in movie_files
-        ):
+        remaining_files = [
+            item for item in movie_files
+            if re.sub(
+                r"[^a-z0-9]+", " ",
+                str(item.get("filename", "")).lower()
+            ).strip() not in deleted_keys
+        ]
+        if len(remaining_files) == len(movie_files):
             continue
 
+        base_name = movie_doc["_id"]
         pending = pending_updates.pop(base_name, None)
         if pending and not pending.cancelled():
             pending.cancel()
 
-        try:
-            existing_keys = await _get_existing_movie_file_keys(movie_files)
-        except Exception:
-            logger.exception(
-                "Could not verify remaining indexed files for %s; leaving announcement unchanged.",
-                base_name
-            )
-            continue
-
-        remaining_files = [
-            item for item in movie_files
-            if _movie_file_key(item.get("filename")) in existing_keys
-        ]
         if remaining_files:
             await db.movie_updates.update_one(
                 {"_id": base_name},
@@ -933,8 +814,25 @@ async def sync_movie_updates_after_file_delete(bot, deleted_filenames):
             )
             await update_movie_message(bot, base_name)
             logger.info("Updated channel announcement after file deletion: %s", base_name)
-        else:
-            await _delete_movie_announcement(bot, movie_doc)
+            continue
+
+        message_id = movie_doc.get("message_id")
+        if message_id:
+            try:
+                await bot.delete_messages(
+                    chat_id=MOVIE_UPDATE_CHANNEL,
+                    message_ids=message_id
+                )
+            except MessageIdInvalid:
+                pass
+            except Exception:
+                logger.exception(
+                    "Could not delete channel announcement for %s", base_name
+                )
+                continue
+
+        await db.movie_updates.delete_one({"_id": base_name})
+        logger.info("Deleted empty movie announcement: %s", base_name)
 
 def generate_fallback_poster(movie_doc, base_name):
     """Create a branded poster when TMDB/IMDb has no usable artwork."""
