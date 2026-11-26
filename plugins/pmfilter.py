@@ -1526,16 +1526,16 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data == "start":
         buttons = [[
-                    InlineKeyboardButton(' 🧿ᴄʜᴀɴɴᴇʟs ', callback_data='channel'),
-                    InlineKeyboardButton(' 🔍ɢʀᴏᴜᴘ ', callback_data='ɢʀᴏᴜᴘ'),
+                    InlineKeyboardButton('✧ Cʜᴀɴɴᴇʟ ✧', callback_data='channel'),
+                    InlineKeyboardButton('✧ Gʀᴏᴜᴘ ✧', callback_data='ɢʀᴏᴜᴘ')
                 ],[
-                    InlineKeyboardButton(' ʜᴇʟᴘ 😎', callback_data='help'),
-                    InlineKeyboardButton(' ᴀʙᴏᴜᴛ ᴍᴇ 📖', callback_data='about')
+                    InlineKeyboardButton('✧ Hᴇʟᴘ ✧', callback_data='help'),
+                    InlineKeyboardButton('✧ Aʙᴏᴜᴛ Mᴇ ✧', callback_data='about')
                 ],[
-                    InlineKeyboardButton('ᴛʀᴇɴᴅɪɴɢ 👑', callback_data="topsearch"),
-                     InlineKeyboardButton('Pʀᴇᴍɪᴜᴍ 🎟', callback_data="premium_info"),
+                    InlineKeyboardButton('✧ Tʀᴇɴᴅɪɴɢ ✧', callback_data="topsearch"),
+                    InlineKeyboardButton('✧ Pʀᴇᴍɪᴜᴍ ✧', callback_data="premium_info")
                 ],[
-                    InlineKeyboardButton('📨 ᴄᴏɴᴛᴀᴄᴛ ᴀᴅᴍɪɴ 💌', callback_data='ct:start')
+                    InlineKeyboardButton('✧ Cᴏɴᴛᴇɴᴛ Aᴅᴍɪɴ ✧', callback_data='ct:start')
                 ]]
         if query.from_user.id in ADMINS:
             buttons.append([InlineKeyboardButton('👑 ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ 👑', callback_data='ap:home')])
