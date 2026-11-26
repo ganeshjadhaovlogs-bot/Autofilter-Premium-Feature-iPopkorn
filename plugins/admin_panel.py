@@ -1000,7 +1000,7 @@ async def remove_duplicate_files_cmd(bot, message):
     if _DUP_JOB is not None:
         await message.reply_text(
             "<b>⚠️ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ᴀʟʀᴇᴀᴅʏ ʀᴜɴɴɪɴɢ.</b>\n"
-            "Use <code>/stop</code> to stop it.",
+            "Use <code>/stopremoveduplicates</code> to stop it.",
             parse_mode=HTML
         )
         return
@@ -1048,7 +1048,7 @@ async def duplicate_cleanup_confirmation(bot, query):
         "<b>🔎 ᴅᴜᴘʟɪᴄᴀᴛᴇ ꜰɪʟᴇs sᴄᴀɴɴɪɴɢ…</b>\n"
         "📁 Scanned: <code>0</code>\n"
         "🗑 Deleted: <code>0</code>\n\n"
-        "Stop anytime with <code>/stop</code>.",
+        "Stop anytime with <code>/stopremoveduplicates</code>.",
         parse_mode=HTML
     )
 
@@ -1097,7 +1097,7 @@ async def duplicate_cleanup_confirmation(bot, query):
                         f"📁 Scanned: <code>{scanned}</code>\n"
                         f"🗑 Deleted: <code>{deleted}</code>\n"
                         f"⏭ Skipped: <code>{skipped}</code>\n\n"
-                        "Stop anytime with <code>/stop</code>.",
+                        "Stop anytime with <code>/stopremoveduplicates</code>.",
                         parse_mode=HTML
                     )
 
@@ -1126,7 +1126,7 @@ async def duplicate_cleanup_confirmation(bot, query):
         _DUP_JOB = None
 
 
-@Client.on_message(filters.private & filters.command("stop") & filters.user(ADMINS))
+@Client.on_message(filters.private & filters.command("stopremoveduplicates") & filters.user(ADMINS))
 async def stop_duplicate_cleanup_cmd(bot, message):
     """Stop the active duplicate cleanup, or cancel its pending confirmation."""
     global _DUP_JOB
