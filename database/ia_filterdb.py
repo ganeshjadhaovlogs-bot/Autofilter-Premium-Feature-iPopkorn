@@ -46,6 +46,7 @@ class Media(Document):
     file_type = fields.StrField(allow_none=True)
     mime_type = fields.StrField(allow_none=True)
     caption = fields.StrField(allow_none=True)
+    duration = fields.IntField(allow_none=True)
 
     class Meta:
         indexes = ("$file_name",)
@@ -61,6 +62,7 @@ class Media2(Document):
     file_type = fields.StrField(allow_none=True)
     mime_type = fields.StrField(allow_none=True)
     caption = fields.StrField(allow_none=True)
+    duration = fields.IntField(allow_none=True)
 
     class Meta:
         indexes = ("$file_name",)
@@ -123,6 +125,7 @@ async def save_file(media):
             file_type=media.file_type,
             mime_type=media.mime_type,
             caption=(media.caption.html if media.caption and INDEX_CAPTION else None),
+            duration=(int(getattr(media, "duration", 0) or 0) or None),
         )
     except ValidationError as e:
         logger.exception(f"[VALIDATION ERROR] '{file_name}' → {e}")
