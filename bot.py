@@ -14,6 +14,7 @@ import asyncio
 from datetime import date, datetime
 import pytz
 from aiohttp import web
+import aiohttp
 from database.ia_filterdb import Media, Media2
 from database.users_chats_db import db
 from info import *
@@ -45,6 +46,34 @@ async def roaroicbot_start():
     print('\n\nInitalizing RoaroicBot')
     print(DEV_CREDIT)
     await roaroicbot.start()
+
+    # Keep Telegram's bot menu set to the registered command list.
+    try:
+        bot_commands = [
+            {"command": command, "description": str(description).strip()[:256]}
+            for command, description in Bot_cmds.items()
+        ]
+        async with aiohttp.ClientSession() as session:
+            commands_response = await session.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/setMyCommands",
+                json={"commands": bot_commands}
+            )
+            commands_result = await commands_response.json()
+            if not commands_result.get("ok"):
+                logging.warning("Could not register Telegram bot commands: %s", commands_result)
+
+            menu_response = await session.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/setChatMenuButton",
+                json={"menu_button": {"type": "commands"}}
+            )
+            menu_result = await menu_response.json()
+            if menu_result.get("ok"):
+                logging.info("Telegram Menu Button set to Commands.")
+            else:
+                logging.warning("Could not set Telegram Menu Button to Commands: %s", menu_result)
+    except Exception:
+        logging.exception("Failed to configure Telegram command menu.")
+
     bot_info = await roaroicbot.get_me()
     roaroicbot.username = bot_info.username
     await initialize_clients()
