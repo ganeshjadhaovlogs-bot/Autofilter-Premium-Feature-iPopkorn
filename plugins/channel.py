@@ -1002,8 +1002,15 @@ def generate_movie_message(movie_doc, base_name):
             rating = f"{float(rating):.1f}/10"
         except (TypeError, ValueError):
             pass
-    # Keep every detected quality in first-upload order, without duplicates.
-    quality_str = ", ".join(all_qualities) if all_qualities else "N/A"
+    # Show resolution qualities first, highest to lowest, then source/codec labels.
+    # Example: 1080p, 720p, 480p, WEB-DL, HEVC.
+    def quality_sort_key(label):
+        match = re.fullmatch(r"(\\d{3,4})p", str(label).strip(), re.IGNORECASE)
+        if match:
+            return (0, -int(match.group(1)), "")
+        return (1, 0, str(label).upper())
+
+    quality_str = ", ".join(sorted(all_qualities, key=quality_sort_key)) if all_qualities else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else (
         movie_doc.get("ott_platform") or "N/A"
