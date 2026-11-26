@@ -36,7 +36,7 @@ INDEX_CAPTION = is_enabled(str(environ.get('SAVE_CAPTION', True)), True) # Save 
 #Making it false will not save caption in db SO you can save some storage space
 
 
-PICS = (environ.get('PICS', 'https://i.ibb.co/KxVzBmBw/photo-2026-11-17-13-25-37-7709131031172874268.jpg https://graph.org/file/5303692652d91d52180c2.jpg https://graph.org/file/425b6f46efc7c6d64105f.jpg https://graph.org/file/876867e761c6c7a29855b.jpg')).split()  # Sample pic
+PICS = (environ.get('PICS', 'https://i.ibb.co/KxVzBmBw/photo-2026-11-17-13-25-37-7709131031172874268.jpg')).split()  # Sample pic
 NOR_IMG = environ.get("NOR_IMG", "https://graph.org/file/e20b5fdaf217252964202.jpg")
 MELCOW_PHOTO = environ.get("MELCOW_PHOTO", "https://i.ibb.co/KxVzBmBw/photo-2026-11-17-13-25-37-7709131031172874268.jpg")
 SPELL_IMG = environ.get("SPELL_IMG", "https://graph.org/file/13702ae26fb05df52667c.jpg")
