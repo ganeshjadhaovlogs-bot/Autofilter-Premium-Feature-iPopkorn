@@ -1063,8 +1063,15 @@ async def refresh_all_movie_metadata(bot, message):
     if not hasattr(db, "movie_updates"):
         db.movie_updates = db.db.movie_updates
 
-    checked = updated = posted = 0
+    checked = updated = posted = failed = 0
     stopped = False
+
+    def has_value(value):
+        return value not in (None, "", [], {}, "N/A", "n/a")
+
+    def first_value(*values):
+        return next((value for value in values if has_value(value)), None)
+
     try:
         async for movie_doc in db.movie_updates.find({}):
             if refresh_stop_requested:
@@ -1075,13 +1082,14 @@ async def refresh_all_movie_metadata(bot, message):
             if not base_name:
                 continue
 
+            checked += 1
             try:
-                imdb_details = await get_movie_details(base_name) or {}
-                tmdb_details = await get_movie_detailsx(base_name) or {}
+                # Query both sources independently. One provider failing must not
+                # prevent valid metadata from the other provider being refreshed.
+                imdb_details = await get_movie_details(base_name)
+                tmdb_details = await get_movie_detailsx(base_name)
 
-                # Provider errors are diagnostic dictionaries, not movie metadata.
-                # Never let {"error": "..."} become the selected metadata object.
-                if not isinstance(imdb_details, dict):
+                if not isinstance(imdb_details, dict) or imdb_details.get("error"):
                     imdb_details = {}
                 if not isinstance(tmdb_details, dict) or tmdb_details.get("error"):
                     logger.warning(
@@ -1091,76 +1099,117 @@ async def refresh_all_movie_metadata(bot, message):
                     )
                     tmdb_details = {}
 
-                # Stop before writing/posting this movie if cancellation was requested
-                # while the metadata providers were being queried.
                 if refresh_stop_requested:
                     stopped = True
                     break
 
-                details = dict(tmdb_details)
-                for key, value in imdb_details.items():
-                    if value not in (None, "", [], "N/A"):
-                        details[key] = value
+                # Prefer IMDb for IMDb-specific fields; use TMDB to fill gaps.
+                # This avoids a blank/partial provider response erasing good data.
+                title = first_value(imdb_details.get("title"), tmdb_details.get("title"), movie_doc.get("title"), base_name)
+                raw_genres = first_value(imdb_details.get("genres"), tmdb_details.get("genres"))
+                if isinstance(raw_genres, (list, tuple, set)):
+                    genres = ", ".join(str(item) for item in raw_genres if item)
+                elif isinstance(raw_genres, str):
+                    genres = raw_genres.strip()
+                else:
+                    genres = None
 
-                # Always select the TMDB landscape backdrop first for channel thumbnails.
-                # Portrait TMDB poster/IMDb artwork are fallbacks only.
+                raw_languages = first_value(imdb_details.get("languages"), tmdb_details.get("languages"))
+                if isinstance(raw_languages, (list, tuple, set)):
+                    online_languages = ", ".join(str(item) for item in raw_languages if item)
+                elif isinstance(raw_languages, str):
+                    online_languages = raw_languages.strip()
+                else:
+                    online_languages = None
+
+                runtime = format_runtime(first_value(
+                    imdb_details.get("runtime"),
+                    tmdb_details.get("runtime"),
+                    tmdb_details.get("episode_run_time")
+                ))
+                old_runtime = format_runtime(movie_doc.get("runtime"))
+
+                # Always prefer the landscape TMDB backdrop for channel artwork.
                 tmdb_backdrop = tmdb_details.get("backdrop_url")
                 tmdb_poster = tmdb_details.get("poster_url")
                 imdb_poster = imdb_details.get("poster_url")
-                poster_url = tmdb_backdrop or tmdb_poster or imdb_poster
+                poster_url = first_value(
+                    tmdb_backdrop, tmdb_poster, imdb_poster,
+                    movie_doc.get("poster_url"), movie_doc.get("backup_poster_url")
+                )
                 logger.info(
                     "Refresh poster source for '%s': %s",
                     base_name,
                     "TMDB backdrop" if tmdb_backdrop and poster_url == tmdb_backdrop
                     else "TMDB poster" if tmdb_poster and poster_url == tmdb_poster
                     else "IMDb" if imdb_poster and poster_url == imdb_poster
-                    else "no provider artwork"
+                    else "saved artwork" if poster_url
+                    else "no artwork"
                 )
-                raw_genres = details.get("genres")
-                if isinstance(raw_genres, (list, tuple, set)):
-                    genres = ", ".join(str(g) for g in raw_genres if g)
-                elif isinstance(raw_genres, str):
-                    genres = raw_genres
-                else:
-                    genres = "N/A"
 
-                online_languages = details.get("languages") or []
-                if isinstance(online_languages, (list, tuple, set)):
-                    online_languages = ", ".join(str(item) for item in online_languages if item)
+                rating = first_value(imdb_details.get("rating"), tmdb_details.get("rating"), movie_doc.get("rating"))
+                year = first_value(imdb_details.get("year"), tmdb_details.get("year"), movie_doc.get("year"))
+                ott = first_value(tmdb_details.get("ott_platform"), movie_doc.get("ott_platform"))
+                imdb_id = first_value(imdb_details.get("imdb_id"), tmdb_details.get("imdb_id"))
+                imdb_url = first_value(
+                    imdb_details.get("url"),
+                    movie_doc.get("imdb_url"),
+                    f"https://www.imdb.com/title/{imdb_id}" if imdb_id else None,
+                    tmdb_details.get("tmdb_url")
+                )
+
+                # If both sources returned no usable metadata, leave this movie
+                # untouched rather than counting a no-op as a successful refresh.
+                has_fresh_metadata = any((
+                    has_value(imdb_details.get("title")),
+                    has_value(imdb_details.get("genres")),
+                    has_value(imdb_details.get("rating")),
+                    has_value(imdb_details.get("runtime")),
+                    has_value(imdb_details.get("year")),
+                    has_value(tmdb_details.get("title")),
+                    has_value(tmdb_details.get("genres")),
+                    has_value(tmdb_details.get("rating")),
+                    has_value(tmdb_details.get("runtime")),
+                    has_value(tmdb_details.get("episode_run_time")),
+                    has_value(tmdb_details.get("ott_platform")),
+                    has_value(tmdb_details.get("languages")),
+                    has_value(tmdb_details.get("poster_url")),
+                    has_value(tmdb_details.get("backdrop_url")),
+                    has_value(imdb_details.get("poster_url"))
+                ))
+                if not has_fresh_metadata:
+                    failed += 1
+                    logger.warning("No fresh IMDb/TMDB metadata found for %s; keeping saved data", base_name)
+                    await asyncio.sleep(1)
+                    continue
+
                 updates = {
-                    "title": details.get("title") or base_name,
-                    # Keep previously saved values when a provider temporarily
-                    # omits a field or returns an empty result.
-                    "genres": genres if genres != "N/A" else (movie_doc.get("genres") or "N/A"),
-                    "rating": details.get("rating") if details.get("rating") not in (None, "", "N/A") else (movie_doc.get("rating") or "N/A"),
-                    "runtime": format_runtime(details.get("runtime") or imdb_details.get("runtime") or tmdb_details.get("runtime") or tmdb_details.get("episode_run_time")) or format_runtime(movie_doc.get("runtime")) or "N/A",
-                    "year": details.get("year") or movie_doc.get("year"),
-                    "ott_platform": tmdb_details.get("ott_platform") or movie_doc.get("ott_platform") or "N/A",
+                    "title": title,
+                    "genres": genres or movie_doc.get("genres") or "N/A",
+                    "rating": rating if has_value(rating) else "N/A",
+                    "runtime": runtime or old_runtime or "N/A",
+                    "year": year,
+                    "ott_platform": ott or "N/A",
                     "online_languages": online_languages or movie_doc.get("online_languages") or "N/A",
-                    "poster_url": poster_url or movie_doc.get("poster_url") or movie_doc.get("backup_poster_url"),
-                    "backup_poster_url": next(
-                        (url for url in (tmdb_backdrop, imdb_poster, movie_doc.get("backup_poster_url"))
-                         if url and url != poster_url),
-                        None
+                    "poster_url": poster_url,
+                    "backup_poster_url": first_value(
+                        *(url for url in (tmdb_poster, imdb_poster, movie_doc.get("backup_poster_url"))
+                          if url and url != poster_url)
                     ),
-                    "imdb_url": imdb_details.get("url") or movie_doc.get("imdb_url") or (
-                        f"https://www.imdb.com/title/{imdb_details['imdb_id']}"
-                        if imdb_details.get("imdb_id") else details.get("tmdb_url", "")
-                    )
+                    "imdb_url": imdb_url or ""
                 }
                 await db.movie_updates.update_one(
                     {"_id": base_name},
                     {"$set": updates}
                 )
                 movie_doc.update(updates)
-                checked += 1
                 updated += 1
 
                 if refresh_stop_requested:
                     stopped = True
                     break
 
-                # Refresh metadata by editing the existing channel post in place.
+                # Edit the existing announcement; do not create a new post.
                 await update_movie_message(bot, base_name)
                 if movie_doc.get("message_id"):
                     posted += 1
@@ -1170,26 +1219,20 @@ async def refresh_all_movie_metadata(bot, message):
                     break
                 await asyncio.sleep(1)
             except Exception:
-                checked += 1
+                failed += 1
                 logger.exception("Metadata refresh failed for %s", base_name)
 
         if refresh_stop_requested:
             stopped = True
 
-        if stopped:
-            await status.edit_text(
-                f"<b>⏹️ Refresh stopped.\n\n"
-                f"Movies checked: {checked}\n"
-                f"Metadata updated: {updated}\n"
-                f"Channel posts refreshed: {posted}</b>"
-            )
-        else:
-            await status.edit_text(
-                f"<b>✅ Refresh complete!\n\n"
-                f"Movies checked: {checked}\n"
-                f"Metadata updated: {updated}\n"
-                f"Channel posts refreshed: {posted}</b>"
-            )
+        result_title = "⏹️ Refresh stopped." if stopped else "✅ Refresh complete!"
+        await status.edit_text(
+            f"<b>{result_title}\\n\\n"
+            f"Movies checked: {checked}\\n"
+            f"Metadata updated: {updated}\\n"
+            f"Channel posts refreshed: {posted}\\n"
+            f"Failed / no metadata: {failed}</b>"
+        )
     finally:
         refresh_running = False
         refresh_stop_requested = False
