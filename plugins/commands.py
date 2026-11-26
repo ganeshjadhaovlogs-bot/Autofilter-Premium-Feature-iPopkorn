@@ -163,16 +163,16 @@ async def start(client, message):
         await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
     if len(message.command) != 2:
         buttons = [[
-                    InlineKeyboardButton(' ⌣🍒ᴄʜᴀɴɴᴇʟs ', callback_data='channel'),
-                    InlineKeyboardButton(' 🔍ɢʀᴏᴜᴘ ', callback_data='ɢʀᴏᴜᴘ')
+                    InlineKeyboardButton('✧ Cʜᴀɴɴᴇʟ ✧', callback_data='channel'),
+                    InlineKeyboardButton('✧ Gʀᴏᴜᴘ ✧', callback_data='ɢʀᴏᴜᴘ')
                 ],[
-                    InlineKeyboardButton(' ʜᴇʟᴘ 😎', callback_data='help'),
-                    InlineKeyboardButton(' ᴀʙᴏᴜᴛ ᴍᴇ 📖', callback_data='about')
+                    InlineKeyboardButton('✧ Hᴇʟᴘ ✧', callback_data='help'),
+                    InlineKeyboardButton('✧ Aʙᴏᴜᴛ Mᴇ ✧', callback_data='about')
                 ],[
-                    InlineKeyboardButton('ᴛʀᴇɴᴅɪɴɢ 👑', callback_data="topsearch"),
-                     InlineKeyboardButton('Pʀᴇᴍɪᴜᴍ 🎟', callback_data="premium_info"),
+                    InlineKeyboardButton('✧ Tʀᴇɴᴅɪɴɢ ✧', callback_data="topsearch"),
+                    InlineKeyboardButton('✧ Pʀᴇᴍɪᴜᴍ ✧', callback_data="premium_info"),
                 ],[
-                    InlineKeyboardButton('📨 ᴄᴏɴᴛᴀᴄᴛ ᴀᴅᴍɪɴ 💌', callback_data='ct:start')
+                    InlineKeyboardButton('✧ Cᴏɴᴛᴇɴᴛ Aᴅᴍɪɴ ✧', callback_data='ct:start')
                 ]]
         if message.from_user.id in ADMINS:
             buttons.append([InlineKeyboardButton('👑 ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ 👑', callback_data='ap:home')])
@@ -200,16 +200,16 @@ async def start(client, message):
 
     if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
         buttons = [[
-                    InlineKeyboardButton(' ⌣🍒ᴄʜᴀɴɴᴇʟs ', callback_data='channel'),
-                    InlineKeyboardButton(' 🔍ɢʀᴏᴜᴘ ', callback_data='ɢʀᴏᴜᴘ')
+                    InlineKeyboardButton('✧ Cʜᴀɴɴᴇʟ ✧', callback_data='channel'),
+                    InlineKeyboardButton('✧ Gʀᴏᴜᴘ ✧', callback_data='ɢʀᴏᴜᴘ')
                 ],[
-                    InlineKeyboardButton(' ʜᴇʟᴘ 😎', callback_data='help'),
-                    InlineKeyboardButton(' ᴀʙᴏᴜᴛ ᴍᴇ 📖', callback_data='about')
+                    InlineKeyboardButton('✧ Hᴇʟᴘ ✧', callback_data='help'),
+                    InlineKeyboardButton('✧ Aʙᴏᴜᴛ Mᴇ ✧', callback_data='about')
                 ],[
-                    InlineKeyboardButton('ᴛʀᴇɴᴅɪɴɢ 👑', callback_data="topsearch"),
-                     InlineKeyboardButton('Pʀᴇᴍɪᴜᴍ 🎟', callback_data="premium_info"),
+                    InlineKeyboardButton('✧ Tʀᴇɴᴅɪɴɢ ✧', callback_data="topsearch"),
+                    InlineKeyboardButton('✧ Pʀᴇᴍɪᴜᴍ ✧', callback_data="premium_info"),
                 ],[
-                    InlineKeyboardButton('📨 ᴄᴏɴᴛᴀᴄᴛ ᴀᴅᴍɪɴ 💌', callback_data='ct:start')
+                    InlineKeyboardButton('✧ Cᴏɴᴛᴇɴᴛ Aᴅᴍɪɴ ✧', callback_data='ct:start')
                 ]]
         if message.from_user.id in ADMINS:
             buttons.append([InlineKeyboardButton('👑 ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ 👑', callback_data='ap:home')])
