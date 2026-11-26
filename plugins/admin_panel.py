@@ -986,44 +986,127 @@ def _duplicate_key(doc):
     return (title, episode, caption, quality, int(duration))
 
 
+# Pending confirmations are keyed by admin ID; only one cleanup job runs at a time.
+_DUP_PENDING = {}
+_DUP_JOB = None
+
+
 @Client.on_message(filters.private & filters.command("removeduplicates") & filters.user(ADMINS))
 async def remove_duplicate_files_cmd(bot, message):
-    status = await message.reply_text(
-        "<b>🔎 ᴅᴜᴘʟɪᴄᴀᴛᴇ ꜰɪʟᴇs sᴄᴀɴɴɪɴɢ…</b>", parse_mode=HTML
+    """Ask for explicit confirmation before deleting duplicate database records."""
+    global _DUP_JOB
+
+    admin_id = message.from_user.id
+    if _DUP_JOB is not None:
+        await message.reply_text(
+            "<b>⚠️ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ᴀʟʀᴇᴀᴅʏ ʀᴜɴɴɪɴɢ.</b>\n"
+            "Use <code>/stop</code> to stop it.",
+            parse_mode=HTML
+        )
+        return
+
+    _DUP_PENDING[admin_id] = True
+    await message.reply_text(
+        "<b>⚠️ ᴅᴜᴘʟɪᴄᴀᴛᴇ ꜰɪʟᴇs ᴅᴇʟᴇᴛᴇ ᴋᴀʀɴᴇ ᴋɪ ᴄᴏɴꜰɪʀᴍᴀᴛɪᴏɴ</b>\n\n"
+        "Kya aap duplicate files scan karke delete karna chahte hain?\n"
+        "Badi file ko keep kiya jayega.\n\n"
+        "✅ Yes = Start cleanup\n❌ No = Cancel",
+        reply_markup=KB([
+            [B("✅ Yes", callback_data="dup_cleanup:yes"),
+             B("❌ No", callback_data="dup_cleanup:no")]
+        ]),
+        parse_mode=HTML
     )
+
+
+@Client.on_callback_query(filters.regex(r"^dup_cleanup:(yes|no)$") & filters.user(ADMINS))
+async def duplicate_cleanup_confirmation(bot, query):
+    """Handle the Yes/No confirmation buttons for duplicate cleanup."""
+    global _DUP_JOB
+
+    admin_id = query.from_user.id
+    action = query.data.split(":", 1)[1]
+    if not _DUP_PENDING.pop(admin_id, None):
+        await query.answer("This confirmation has expired.", show_alert=True)
+        return
+
+    if action == "no":
+        await query.answer("Cleanup cancelled.")
+        await query.message.edit_text(
+            "<b>❎ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ᴄᴀɴᴄᴇʟʟᴇᴅ.</b>",
+            parse_mode=HTML
+        )
+        return
+
+    if _DUP_JOB is not None:
+        await query.answer("Another cleanup is already running.", show_alert=True)
+        return
+
+    await query.answer("Cleanup started.")
+    status = query.message
+    await status.edit_text(
+        "<b>🔎 ᴅᴜᴘʟɪᴄᴀᴛᴇ ꜰɪʟᴇs sᴄᴀɴɴɪɴɢ…</b>\n"
+        "📁 Scanned: <code>0</code>\n"
+        "🗑 Deleted: <code>0</code>\n\n"
+        "Stop anytime with <code>/stop</code>.",
+        parse_mode=HTML
+    )
+
+    # Keep a shared stop flag so /stop can interrupt the active scan safely.
+    _DUP_JOB = {"stop": False}
+    job = _DUP_JOB
     collections = [("DB 1", Media.collection)]
     if MULTIPLE_DB:
         collections.append(("DB 2", Media2.collection))
 
     groups = {}
     scanned = skipped = deleted = 0
+    stopped = False
     try:
         for db_label, collection in collections:
             async for doc in collection.find(
                 {}, {"_id": 1, "file_name": 1, "file_size": 1, "caption": 1, "duration": 1}
             ):
+                if job["stop"]:
+                    stopped = True
+                    break
+
                 scanned += 1
                 key = _duplicate_key(doc)
                 if key is None:
                     skipped += 1
-                    continue
-                entry = (collection, doc["_id"], int(doc.get("file_size") or 0), db_label)
-                current = groups.get(key)
-                if current is None:
-                    groups[key] = entry
-                    continue
-
-                # Retain the larger file when two otherwise identical records exist.
-                if entry[2] > current[2]:
-                    remove = current
-                    groups[key] = entry
                 else:
-                    remove = entry
-                result = await remove[0].delete_one({"_id": remove[1]})
-                deleted += result.deleted_count
+                    entry = (collection, doc["_id"], int(doc.get("file_size") or 0), db_label)
+                    current = groups.get(key)
+                    if current is None:
+                        groups[key] = entry
+                    else:
+                        # Keep the larger file when otherwise identical records are found.
+                        if entry[2] > current[2]:
+                            remove = current
+                            groups[key] = entry
+                        else:
+                            remove = entry
+                        result = await remove[0].delete_one({"_id": remove[1]})
+                        deleted += result.deleted_count
 
+                # Refresh the live counters periodically without editing for every file.
+                if scanned % 100 == 0:
+                    await status.edit_text(
+                        "<b>🔎 ᴅᴜᴘʟɪᴄᴀᴛᴇ ꜰɪʟᴇs ᴄʟᴇᴀɴᴜᴘ ɪɴ ᴘʀᴏɢʀᴇss</b>\n\n"
+                        f"📁 Scanned: <code>{scanned}</code>\n"
+                        f"🗑 Deleted: <code>{deleted}</code>\n"
+                        f"⏭ Skipped: <code>{skipped}</code>\n\n"
+                        "Stop anytime with <code>/stop</code>.",
+                        parse_mode=HTML
+                    )
+
+            if stopped:
+                break
+
+        heading = "⏹ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ sᴛᴏᴘᴘᴇᴅ" if stopped or job["stop"] else "✅ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ᴄᴏᴍᴘʟᴇᴛᴇ"
         await status.edit_text(
-            "<b>✅ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ᴄᴏᴍᴘʟᴇᴛᴇ</b>\n\n"
+            f"<b>{heading}</b>\n\n"
             f"📁 ꜱᴄᴀɴɴᴇᴅ : <code>{scanned}</code>\n"
             f"🗑 ᴅᴜᴘʟɪᴄᴀᴛᴇs ᴅᴇʟᴇᴛᴇᴅ : <code>{deleted}</code>\n"
             f"⏭ ɴᴏᴛ ᴄᴏᴍᴘᴀʀᴇᴅ (ᴍɪssɪɴɢ ᴄᴀᴘᴛɪᴏɴ/ǫᴜᴀʟɪᴛʏ/ᴅᴜʀᴀᴛɪᴏɴ) : <code>{skipped}</code>\n\n"
@@ -1033,10 +1116,42 @@ async def remove_duplicate_files_cmd(bot, message):
     except Exception:
         logger.exception("Duplicate cleanup failed")
         await status.edit_text(
-            "<b>⚠️ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ꜰᴀɪʟᴇᴅ.</b>\nᴄʜᴇᴄᴋ ʀᴇɴᴅᴇʀ ʟᴏɢs.",
+            "<b>⚠️ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ꜰᴀɪʟᴇᴅ.</b>\n"
+            f"📁 Scanned: <code>{scanned}</code>\n"
+            f"🗑 Deleted: <code>{deleted}</code>\n"
+            "Check Render logs.",
             parse_mode=HTML
         )
+    finally:
+        _DUP_JOB = None
 
+
+@Client.on_message(filters.private & filters.command("stop") & filters.user(ADMINS))
+async def stop_duplicate_cleanup_cmd(bot, message):
+    """Stop the active duplicate cleanup, or cancel its pending confirmation."""
+    global _DUP_JOB
+
+    admin_id = message.from_user.id
+    if _DUP_PENDING.pop(admin_id, None):
+        await message.reply_text(
+            "<b>⏹ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ᴄᴏɴꜰɪʀᴍᴀᴛɪᴏɴ ᴄᴀɴᴄᴇʟʟᴇᴅ.</b>",
+            parse_mode=HTML
+        )
+        return
+
+    if _DUP_JOB is None:
+        await message.reply_text(
+            "<b>ℹ️ ᴋᴏɪ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴄʟᴇᴀɴᴜᴘ ʀᴜɴɴɪɴɢ ɴᴀʜɪɴ ʜᴀɪ.</b>",
+            parse_mode=HTML
+        )
+        return
+
+    _DUP_JOB["stop"] = True
+    await message.reply_text(
+        "<b>⏹ sᴛᴏᴘ ʀᴇǫᴜᴇsᴛ ʀᴇᴄᴇɪᴠᴇᴅ.</b>\n"
+        "Current scan will stop safely and show the final counts.",
+        parse_mode=HTML
+    )
 
 
 # ------------------------------------------------ admin message routing ----
