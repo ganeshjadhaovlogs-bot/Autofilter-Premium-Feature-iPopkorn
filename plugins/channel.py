@@ -1063,7 +1063,7 @@ async def refresh_all_movie_metadata(bot, message):
     if not hasattr(db, "movie_updates"):
         db.movie_updates = db.db.movie_updates
 
-    checked = updated = posted = failed = 0
+    checked = updated = posted = failed = post_failed = 0
     stopped = False
 
     def has_value(value):
@@ -1209,10 +1209,31 @@ async def refresh_all_movie_metadata(bot, message):
                     stopped = True
                     break
 
-                # Edit the existing announcement; do not create a new post.
-                await update_movie_message(bot, base_name)
+                # Existing announcements are edited in place. If no message ID
+                # is saved, explicitly send a new announcement and verify that
+                # Telegram's returned message ID was saved to MongoDB.
                 if movie_doc.get("message_id"):
+                    await update_movie_message(bot, base_name)
+                else:
+                    sent_message = await send_movie_update(bot, base_name)
+                    if not sent_message:
+                        post_failed += 1
+                        logger.error(
+                            "Refresh could not create channel announcement for %s",
+                            base_name
+                        )
+
+                latest_doc = await db.movie_updates.find_one({"_id": base_name})
+                if latest_doc and latest_doc.get("message_id"):
                     posted += 1
+                elif not movie_doc.get("message_id") and sent_message is None:
+                    pass
+                else:
+                    post_failed += 1
+                    logger.error(
+                        "No saved channel message ID after refresh for %s",
+                        base_name
+                    )
 
                 if refresh_stop_requested:
                     stopped = True
@@ -1231,7 +1252,8 @@ async def refresh_all_movie_metadata(bot, message):
             f"Movies checked: {checked}\\n"
             f"Metadata updated: {updated}\\n"
             f"Channel posts refreshed: {posted}\\n"
-            f"Failed / no metadata: {failed}</b>"
+            f"Post creation/update failures: {post_failed}\\n"
+            f"Metadata failures / no metadata: {failed}</b>"
         )
     finally:
         refresh_running = False
