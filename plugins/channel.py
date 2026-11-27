@@ -109,6 +109,26 @@ def remove_ignored_words(text: str) -> str:
     IGNORE_WORDS_LOWER = {w.lower() for w in IGNORE_WORDS}
     return " ".join(word for word in text.split() if word.lower() not in IGNORE_WORDS_LOWER)
 
+def wrap_caption_value(value, width=24, indent=18):
+    """Wrap long announcement values so they stay within their own caption field."""
+    value = re.sub(r"\\s+", " ", str(value or "N/A")).strip()
+    if not value:
+        return "N/A"
+    words = value.split(" ")
+    lines = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > width:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return ("\\n" + (" " * indent)).join(lines)
+
+
 def format_quality_label(value: str) -> str:
     value = str(value).strip()
     # Keep resolution notation like 1080p/480p, uppercase codec and source labels.
@@ -1120,6 +1140,16 @@ def generate_movie_message(movie_doc, base_name):
     year = movie_doc.get("year")
     if year and str(year) not in str(display_title):
         display_title = f"{display_title} ({year})"
+
+    # Wrap every field value independently; continuation lines align under
+    # the value instead of spilling into the next caption field.
+    display_title = wrap_caption_value(display_title, width=30, indent=12)
+    genres = wrap_caption_value(genres, width=24, indent=18)
+    ott_str = wrap_caption_value(ott_str, width=24, indent=18)
+    runtime = wrap_caption_value(runtime, width=24, indent=18)
+    quality_str = wrap_caption_value(quality_str, width=24, indent=18)
+    language_str = wrap_caption_value(language_str, width=24, indent=18)
+    rating = wrap_caption_value(rating, width=24, indent=18)
 
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
