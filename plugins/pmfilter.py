@@ -8,6 +8,7 @@ from fuzzywuzzy import process
 from roaroicbot.util.file_properties import get_name, get_hash
 from urllib.parse import quote_plus
 import logging
+import html
 from database.ia_filterdb import Media, Media2, get_file_details, get_search_results, get_bad_files
 from database.config_db import mdb
 from pyrogram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerIdInvalid, ChatAdminRequired, UserNotParticipant
@@ -2130,6 +2131,54 @@ async def auto_filter(client, msg, spoll=False):
         logger.exception(e)
         return
 
+
+@Client.on_callback_query(filters.regex(r"^request_movie$"))
+async def request_movie_callback(client: Client, query: CallbackQuery):
+    original = query.message.reply_to_message
+    if not original or not original.from_user:
+        return await query.answer("⚠️ Request details are no longer available. Please search again.", show_alert=True)
+
+    user = original.from_user
+    movie_name = (original.text or original.caption or "").strip()
+    username = f"@{user.username}" if user.username else "Not set"
+    chat_title = original.chat.title or original.chat.first_name or "Private chat"
+    requested_at = original.date.strftime("%d %b %Y, %I:%M %p UTC")
+
+    request_text = (
+        "<b>🎬 NEW MOVIE / SERIES REQUEST</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"<b>🔎 Requested title:</b> <code>{html.escape(movie_name or 'Not available')}</code>\n"
+        f"<b>👤 User:</b> {user.mention}\n"
+        f"<b>🆔 User ID:</b> <code>{user.id}</code>\n"
+        f"<b>🔗 Username:</b> {html.escape(username)}\n"
+        f"<b>💬 Chat:</b> {html.escape(chat_title)}\n"
+        f"<b>🆔 Chat ID:</b> <code>{original.chat.id}</code>\n"
+        f"<b>🕒 Requested:</b> {requested_at}\n"
+        "━━━━━━━━━━━━━━━━━━"
+    )
+
+    try:
+        await client.send_message(chat_id=-1005702299166, text=request_text, parse_mode=enums.ParseMode.HTML)
+        await query.answer("✅ Your request has been sent to the admin!")
+        await query.message.edit_reply_markup(
+            InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ ʀᴇǫᴜᴇsᴛ sᴇɴᴛ", callback_data="request_movie_sent")
+            ],[
+                InlineKeyboardButton("🔍 ᴄʜᴇᴄᴋ sᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ 🔍",
+                    url=f"https://www.google.com/search?q={quote_plus(movie_name)}")
+            ]])
+        )
+    except Exception as e:
+        logger.exception("Unable to send movie request to admin channel: %s", e)
+        await query.answer("❌ Request could not be sent. Please try again later.", show_alert=True)
+
+
+@Client.on_callback_query(filters.regex(r"^request_movie_sent$"))
+async def request_movie_sent_callback(client: Client, query: CallbackQuery):
+    await query.answer("✅ Your request is already sent.")
+
+
+
 async def ai_spell_check(chat_id, wrong_name):
     async def search_movie(wrong_name):
         search_results = imdb.search_movie(wrong_name)
@@ -2171,8 +2220,11 @@ async def advantage_spell_chok(client, message):
         return
     if not movies:
         google = search.replace(" ", "+")
-        button = [[InlineKeyboardButton(
-            "🔍 ᴄʜᴇᴄᴋ sᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ 🔍", url=f"https://www.google.com/search?q={google}")]]
+        button = [
+            [InlineKeyboardButton("📩 ʀᴇǫᴜᴇsᴛ ᴛʜɪs ᴍᴏᴠɪᴇ", callback_data="request_movie")],
+            [InlineKeyboardButton(
+                "🔍 ᴄʜᴇᴄᴋ sᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ 🔍", url=f"https://www.google.com/search?q={google}")]
+        ]
         k = await message.reply_text(text=script.I_CUDNT.format(search), reply_markup=InlineKeyboardMarkup(button))
         await asyncio.sleep(60)
         await k.delete()
