@@ -184,6 +184,16 @@ def extract_ott_platform(text: str) -> str:
     platforms = {plat for key, plat in OTT_PLATFORMS.items() if key in text}
     return " | ".join(platforms) if platforms else "N/A"
 
+
+def extract_languages(filename: str, caption: str = "") -> str:
+    source = f"{filename or ''} {caption or ''}".lower()
+    found = {
+        CAPTION_LANGUAGES[key]
+        for key in CAPTION_LANGUAGES
+        if re.search(rf"(?<![a-z]){re.escape(key)}(?![a-z])", source)
+    }
+    return ", ".join(sorted(found)) if found else "N/A"
+
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
     if m := EP_ONLY_RANGE.search(filename):
         return 1, f"{int(m.group(1))}-{int(m.group(2))}"
@@ -219,8 +229,7 @@ def extract_media_info(filename: str, caption: str):
     quality = get_qualities(filename, caption_clean)
     ott_platform = extract_ott_platform(f"{filename} {caption_clean}")
 
-    lang_keys = {k for k in CAPTION_LANGUAGES if k in caption_clean or k in filename.lower()}
-    language = ", ".join(sorted({CAPTION_LANGUAGES[k] for k in lang_keys})) if lang_keys else "N/A"
+    language = extract_languages(filename, caption_clean)
 
     season, episode = extract_season_episode(filename)
     if season is not None:
@@ -322,6 +331,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     error_tmdb=False
     file_data = {
         "filename": filename,
+        "caption": caption or "",
         "processed": processed,
         "quality": media_info["quality"],
         "language": media_info["language"],
@@ -653,6 +663,8 @@ async def send_movie_update(bot, base_name):
             )
             await set_red_get_files_button(msg.id, base_name)
             asyncio.create_task(reapply_red_get_files_button_later(msg.id, base_name))
+            # Audit the saved data after the first post is visible, then edit that post.
+            asyncio.create_task(verify_movie_post_after_send(bot, base_name))
             return msg
         except FloodWait as e:
             wait_time = e.value + 2
@@ -782,6 +794,108 @@ async def update_movie_message(bot, base_name):
             return
     except Exception as e:
         logger.error(f"Failed to update movie message: {e}")
+
+
+async def verify_movie_post_after_send(bot, base_name):
+    """Second-pass audit for fields missed during the initial announcement."""
+    await asyncio.sleep(12)
+    changed = False
+    try:
+        async with locks[base_name]:
+            movie_doc = await db.movie_updates.find_one({"_id": base_name})
+            if not movie_doc:
+                return
+
+            files = movie_doc.get("files", [])
+            for item in files:
+                filename = str(item.get("filename") or "")
+                caption = str(item.get("caption") or "")
+                quality = get_qualities(filename, caption)
+                language = extract_languages(filename, caption)
+                ott = extract_ott_platform(f"{filename} {caption}")
+
+                if quality != "N/A" and item.get("quality") != quality:
+                    item["quality"] = quality
+                    changed = True
+                if language != "N/A" and item.get("language") != language:
+                    item["language"] = language
+                    changed = True
+                if ott != "N/A" and item.get("ott_platform") in (None, "", "N/A"):
+                    item["ott_platform"] = ott
+                    changed = True
+
+            # Prefer the actual uploaded media duration when available.
+            durations = [int(x.get("duration_seconds") or 0) for x in files
+                         if int(x.get("duration_seconds") or 0) > 0]
+            if durations:
+                runtime = format_uploaded_duration(max(durations))
+                if runtime and movie_doc.get("runtime") != runtime:
+                    movie_doc["runtime"] = runtime
+                    changed = True
+
+            missing = any(movie_doc.get(k) in (None, "", "N/A")
+                          for k in ("genres", "rating", "runtime", "ott_platform",
+                                    "online_languages")) or not movie_doc.get("poster_url")
+            if missing:
+                imdb = await get_movie_details(base_name) or {}
+                tmdb = await get_movie_detailsx(base_name) or {}
+                if not isinstance(imdb, dict):
+                    imdb = {}
+                if not isinstance(tmdb, dict) or tmdb.get("error"):
+                    tmdb = {}
+
+                updates = {}
+                for field in ("genres", "rating", "runtime", "ott_platform",
+                              "languages", "poster_url", "year", "title"):
+                    value = imdb.get(field)
+                    if value in (None, "", [], "N/A"):
+                        value = tmdb.get(field)
+                    if value in (None, "", [], "N/A"):
+                        continue
+                    if field == "genres" and movie_doc.get("genres") in (None, "", "N/A"):
+                        updates["genres"] = (", ".join(str(v) for v in value)
+                                             if isinstance(value, (list, tuple, set)) else value)
+                    elif field == "rating" and movie_doc.get("rating") in (None, "", "N/A"):
+                        updates["rating"] = value
+                    elif field == "runtime" and movie_doc.get("runtime") in (None, "", "N/A"):
+                        formatted = format_runtime(value)
+                        if formatted:
+                            updates["runtime"] = formatted
+                    elif field == "ott_platform" and movie_doc.get("ott_platform") in (None, "", "N/A"):
+                        updates["ott_platform"] = value
+                    elif field == "languages" and movie_doc.get("online_languages") in (None, "", "N/A"):
+                        updates["online_languages"] = (value if isinstance(value, str)
+                                                       else ", ".join(str(v) for v in value))
+                    elif field == "poster_url" and not movie_doc.get("poster_url"):
+                        updates["poster_url"] = value
+                        updates["is_landscape"] = True
+                    elif field in ("year", "title") and not movie_doc.get(field):
+                        updates[field] = value
+
+                if updates:
+                    movie_doc.update(updates)
+                    changed = True
+
+            if changed:
+                save_fields = {
+                    key: movie_doc[key]
+                    for key in ("runtime", "genres", "rating", "ott_platform",
+                                "online_languages", "poster_url", "is_landscape",
+                                "year", "title")
+                    if key in movie_doc
+                }
+                save_fields["files"] = files
+                await db.movie_updates.update_one(
+                    {"_id": base_name}, {"$set": save_fields}
+                )
+
+        if changed:
+            logger.info("Second-pass audit repaired metadata for '%s'; editing original post.", base_name)
+            await update_movie_message(bot, base_name)
+        else:
+            logger.info("Second-pass audit found no further metadata for '%s'.", base_name)
+    except Exception:
+        logger.exception("Second-pass audit failed for '%s'.", base_name)
 
 
 async def sync_movie_updates_after_file_delete(bot, deleted_filenames):
