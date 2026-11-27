@@ -2132,9 +2132,9 @@ async def auto_filter(client, msg, spoll=False):
         return
 
 
-@Client.on_callback_query(filters.regex(r"^request_movie_(-?\\d+)_([0-9]+)$"))
+@Client.on_callback_query(filters.regex(r"^request_movie_(-?\d+)_([0-9]+)$"))
 async def request_movie_callback(client: Client, query: CallbackQuery):
-    match = re.match(r"^request_movie_(-?\\d+)_([0-9]+)$", query.data or "")
+    match = re.match(r"^request_movie_(-?\d+)_([0-9]+)$", query.data or "")
     original = None
     if match:
         source_chat_id, source_message_id = int(match.group(1)), int(match.group(2))
