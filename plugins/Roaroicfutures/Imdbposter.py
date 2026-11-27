@@ -624,7 +624,7 @@ async def get_movie_detailsx(query, id=False, file=None):
     providers = provider_results.get("IN") or {}
     ott_names = sorted({
         provider.get("provider_name")
-        for category in ("flatrate", "free", "ads")
+        for category in ("flatrate", "free")
         for provider in providers.get(category, [])
         if provider.get("provider_name")
         and provider.get("provider_name").strip().lower() not in {
