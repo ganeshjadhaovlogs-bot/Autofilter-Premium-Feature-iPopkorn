@@ -1534,8 +1534,6 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 ],[
                     InlineKeyboardButton('✧ Tʀᴇɴᴅɪɴɢ ✧', callback_data="topsearch"),
                     InlineKeyboardButton('✧ Pʀᴇᴍɪᴜᴍ ✧', callback_data="premium_info")
-                ],[
-                    InlineKeyboardButton('✧ Cᴏɴᴛᴇɴᴛ Aᴅᴍɪɴ ✧', callback_data='ct:start')
                 ]]
         if query.from_user.id in ADMINS:
             buttons.append([InlineKeyboardButton('👑 ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ 👑', callback_data='ap:home')])
