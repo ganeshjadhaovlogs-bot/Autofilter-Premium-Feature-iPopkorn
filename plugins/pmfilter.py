@@ -2159,7 +2159,14 @@ async def request_movie_callback(client: Client, query: CallbackQuery):
 
     try:
         await client.send_message(chat_id=-1005702299166, text=request_text, parse_mode=enums.ParseMode.HTML)
-        await query.answer("✅ Your request has been sent to the admin!")
+        # Show a permanent confirmation in the user's chat, not only a brief callback alert.
+        await query.message.reply_text(
+            "✅ <b>Yᴏᴜʀ ᴍᴏᴠɪᴇ / sᴇʀɪᴇs ʀᴇǫᴜᴇsᴛ ʜᴀs ʙᴇᴇɴ sᴇɴᴛ ᴛᴏ ᴛʜᴇ ᴀᴅᴍɪɴ.</b>\n\n"
+            "📩 ᴛʜᴀɴᴋ ʏᴏᴜ! Wᴇ'ʟʟ ᴄʜᴇᴄᴋ ʏᴏᴜʀ ʀᴇǫᴜᴇsᴛ.",
+            reply_to_message_id=original.id,
+            parse_mode=enums.ParseMode.HTML
+        )
+        await query.answer("✅ Request sent successfully!")
         await query.message.edit_reply_markup(
             InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ ʀᴇǫᴜᴇsᴛ sᴇɴᴛ", callback_data="request_movie_sent")
@@ -2170,7 +2177,7 @@ async def request_movie_callback(client: Client, query: CallbackQuery):
         )
     except Exception as e:
         logger.exception("Unable to send movie request to admin channel: %s", e)
-        await query.answer("❌ Request could not be sent. Please try again later.", show_alert=True)
+        await query.answer("❌ Request could not be sent. Check that the bot is an admin in the request channel and try again.", show_alert=True)
 
 
 @Client.on_callback_query(filters.regex(r"^request_movie_sent$"))
@@ -2225,7 +2232,7 @@ async def advantage_spell_chok(client, message):
             [InlineKeyboardButton(
                 "🔍 ᴄʜᴇᴄᴋ sᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ 🔍", url=f"https://www.google.com/search?q={google}")]
         ]
-        k = await message.reply_text(text=script.I_CUDNT.format(search), reply_markup=InlineKeyboardMarkup(button))
+        k = await message.reply_text(text=script.I_CUDNT.format(search), reply_markup=InlineKeyboardMarkup(button), reply_to_message_id=message.id)
         await asyncio.sleep(60)
         await k.delete()
         try:
