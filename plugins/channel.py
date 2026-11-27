@@ -367,21 +367,15 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
         # Channel announcement must use the full-width TMDB landscape backdrop first.
         # Only fall back to portrait poster/IMDb artwork when TMDB has no backdrop.
+        # Channel posts must use a genuine landscape thumbnail/backdrop only.
+        # Never substitute portrait IMDb/TMDB posters.
         tmdb_backdrop = tmdb_details.get("backdrop_url")
-        tmdb_poster = tmdb_details.get("poster_url")
-        imdb_poster = imdb_details.get("poster_url")
-        poster_url = tmdb_backdrop or tmdb_poster or imdb_poster
-        backup_poster_url = next(
-            (url for url in (tmdb_poster, imdb_poster) if url and url != poster_url),
-            None
-        )
+        poster_url = tmdb_backdrop
+        backup_poster_url = None
         logger.info(
-            "Announcement poster source for '%s': %s",
+            "Announcement thumbnail source for '%s': %s",
             base_name,
-            "TMDB backdrop" if tmdb_backdrop and poster_url == tmdb_backdrop
-            else "TMDB poster" if tmdb_poster and poster_url == tmdb_poster
-            else "IMDb" if imdb_poster and poster_url == imdb_poster
-            else "no provider artwork"
+            "TMDB landscape backdrop" if poster_url else "no landscape thumbnail (TMDB key/backdrop required)"
         )
 
         raw_genres = details.get("genres", "N/A")
@@ -613,49 +607,31 @@ async def send_movie_update(bot, base_name):
             ]])
 
             resized_poster = None
-            # Try the IMDb image first, then TMDB artwork if the IMDb URL fails.
-            poster_urls = [
-                movie_doc.get("poster_url"),
-                movie_doc.get("backup_poster_url")
-            ]
-            for poster_url in poster_urls:
-                if not poster_url:
-                    continue
-                logger.info("Trying announcement artwork for '%s': %s", base_name, poster_url[:180])
-                resized_poster = await fetch_image(
-                    poster_url,
-                    size=(1280, 720)
-                )
-                if resized_poster:
-                    logger.info("Announcement artwork downloaded successfully for '%s'", base_name)
-                    break
-                logger.warning("Announcement artwork URL failed for '%s': %s", base_name, poster_url[:180])
-
-            # fetch_image already returns 16:9; normalize once more for safety.
+            thumbnail_url = movie_doc.get("poster_url")
+            if thumbnail_url:
+                logger.info("Trying landscape thumbnail for '%s': %s", base_name, thumbnail_url[:180])
+                resized_poster = await fetch_image(thumbnail_url, size=(1280, 720))
             if resized_poster:
-                source_image = Image.open(resized_poster).convert("RGB")
-                landscape_image = ImageOps.fit(
-                    source_image, (1280, 720),
-                    method=Image.Resampling.LANCZOS,
-                    centering=(0.5, 0.5)
+                msg = await bot.send_photo(
+                    chat_id=MOVIE_UPDATE_CHANNEL,
+                    photo=resized_poster,
+                    caption=text,
+                    reply_markup=buttons,
+                    parse_mode=enums.ParseMode.HTML
                 )
-                output = BytesIO()
-                landscape_image.save(output, format="JPEG", quality=92)
-                output.seek(0)
-                output.name = "movie_landscape.jpg"
-                resized_poster = output
+                is_photo = True
             else:
-                logger.warning("IMDb/TMDB poster unavailable for '%s'; using branded fallback.", base_name)
-                resized_poster = generate_fallback_poster(movie_doc, base_name)
-
-            msg = await bot.send_photo(
-                chat_id=MOVIE_UPDATE_CHANNEL,
-                photo=resized_poster,
-                caption=text,
-                reply_markup=buttons,
-                parse_mode=enums.ParseMode.HTML
-            )
-            is_photo = True
+                # No portrait poster or artificial fallback: publish the details
+                # as text until a real landscape thumbnail is available.
+                logger.warning("No landscape thumbnail for '%s'; sending text-only announcement.", base_name)
+                msg = await bot.send_message(
+                    chat_id=MOVIE_UPDATE_CHANNEL,
+                    text=text,
+                    reply_markup=buttons,
+                    parse_mode=enums.ParseMode.HTML,
+                    disable_web_page_preview=True
+                )
+                is_photo = False
 
             await db.movie_updates.update_one(
                 {"_id": base_name},
