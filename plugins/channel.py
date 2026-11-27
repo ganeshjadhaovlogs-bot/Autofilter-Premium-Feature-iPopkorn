@@ -130,11 +130,13 @@ def wrap_caption_value(value, width=24, indent=18):
 
 
 def format_quality_label(value: str) -> str:
-    value = str(value).strip()
-    # Keep resolution notation like 1080p/480p, uppercase codec and source labels.
-    if re.fullmatch(r"\d{3,4}p", value, flags=re.IGNORECASE):
+    value = str(value).strip().upper().replace(" ", "-")
+    # Normalize duplicate spellings such as WEB / WEB DL / WEBDL.
+    if value in {"WEB", "WEB-DL", "WEBDL"}:
+        return "WEB-DL"
+    if re.fullmatch(r"\d{3,4}P", value):
         return value.lower()
-    return value.upper()
+    return value
 
 
 def get_qualities(*texts: str) -> str:
@@ -1040,7 +1042,12 @@ def generate_movie_message(movie_doc, base_name):
         )
         for quality in quality_values:
             quality = format_quality_label(quality.strip())
-            if quality and quality != "N/A":
+            # Keep announcement quality concise: resolutions plus one source
+            # label. Codec tags (X264/X265/HEVC), bit depth and duplicates
+            # are useful internally but not needed in the channel caption.
+            if re.fullmatch(r"(?:2160|1440|1080|720|540|480|360|240|140)P", quality):
+                all_qualities.add(quality.lower())
+            elif quality == "WEB-DL":
                 all_qualities.add(quality)
         if file["language"] != "N/A":
             all_languages.update(l.strip() for l in file["language"].split(",") if l.strip())
@@ -1126,11 +1133,15 @@ def generate_movie_message(movie_doc, base_name):
             return (0, -int(match.group(1)), "")
         return (1, 0, str(label).upper())
 
-    quality_str = ", ".join(sorted(all_qualities, key=quality_sort_key)) if all_qualities else "N/A"
+    ordered_qualities = sorted(all_qualities, key=quality_sort_key)
+    # Show at most three resolutions and one source label (e.g. WEB-DL).
+    resolution_labels = [item for item in ordered_qualities if re.fullmatch(r"\d{3,4}p", item, re.I)][:3]
+    source_labels = [item for item in ordered_qualities if item == "WEB-DL"][:1]
+    quality_str = ", ".join(resolution_labels + source_labels) if (resolution_labels or source_labels) else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
-    ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else (
-        movie_doc.get("ott_platform") or "N/A"
-    )
+    # Only show up to two distinct, verified India providers. Never reuse
+    # stale or filename-derived OTT labels when verified data is unavailable.
+    ott_str = ", ".join(sorted(all_ott_platforms)[:2]) if all_ott_platforms else "N/A"
     if not all_languages:
         online_languages = movie_doc.get("online_languages")
         if online_languages:
