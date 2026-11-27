@@ -1126,11 +1126,11 @@ def generate_movie_message(movie_doc, base_name):
         return (1, 0, str(label).upper())
 
     ordered_qualities = sorted(all_qualities, key=quality_sort_key)
-    # Keep the same compact channel caption: up to three resolutions and
-    # up to two source/format tags, while scanning all database file fields.
-    resolution_labels = [item for item in ordered_qualities if re.fullmatch(r"\d{3,4}p", item, re.I)][:3]
-    source_labels = [item for item in ordered_qualities if not re.fullmatch(r"\d{3,4}p", item, re.I)][:2]
-    quality_str = ", ".join(resolution_labels + source_labels) if (resolution_labels or source_labels) else "N/A"
+    # Channel quality is limited to resolution labels and WEB-DL only.
+    resolution_order = ("2160p", "1080p", "720p", "480p")
+    resolution_labels = [item for item in resolution_order if item in all_qualities]
+    webdl_label = ["WEB-DL"] if "WEB-DL" in all_qualities else []
+    quality_str = ", ".join(resolution_labels + webdl_label) if (resolution_labels or webdl_label) else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     # Only show up to two distinct, verified India providers. Never reuse
     # stale or filename-derived OTT labels when verified data is unavailable.
