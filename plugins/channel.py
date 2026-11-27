@@ -79,9 +79,11 @@ STANDARD_GENRES = {
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
 QUALITY_PATTERN = re.compile(
-    r"\b(?:HDCam|HDTC|CamRip|TS|TC|TeleSync|DVDScr|DVDRip|PreDVD|"
-    r"WEBRip|WEB-DL|TVRip|HDTV|WEB DL|WebDl|BluRay|BRRip|BDRip|"
-    r"360p|480p|720p|1080p|2160p|4K|1440p|540p|240p|140p|HEVC|HDRip)\b", 
+    r"(?<![A-Za-z0-9])(?:ORG|HDCAM|HDTC|CAMRIP|TELESYNC|TS|TC|DVDSCR|DVDRIP|PREDVD|"
+    r"WEBRIP|WEB[- ]?DL|WEBDL|TVRIP|HDTV|BLURAY|BRRIP|BDRIP|HDRIP|REMUX|"
+    r"360P|480P|540P|720P|1080P|1440P|2160P|240P|140P|4K|8K|"
+    r"HEVC|H\s*\.\s*265|H265|X265|H\s*\.\s*264|H264|X264|AV1|"
+    r"8BIT|10BIT|HDR10|HDR|SDR|PROPER|REPACK)(?![A-Za-z0-9])",
     re.IGNORECASE
 )
 YEAR_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:19|20)\d{2}(?![A-Za-z0-9])")
@@ -115,13 +117,14 @@ def format_quality_label(value: str) -> str:
     return value.upper()
 
 
-def get_qualities(text: str) -> str:
-    qualities = QUALITY_PATTERN.findall(text)
+def get_qualities(*texts: str) -> str:
+    """Collect every recognized quality/source tag from filename and caption."""
     formatted = []
-    for quality in qualities:
-        label = format_quality_label(quality)
-        if label and label not in formatted:
-            formatted.append(label)
+    for text in texts:
+        for quality in QUALITY_PATTERN.findall(str(text or "")):
+            label = format_quality_label(quality)
+            if label and label not in formatted:
+                formatted.append(label)
     return ", ".join(formatted) if formatted else "N/A"
 
 def format_uploaded_duration(seconds):
@@ -213,7 +216,7 @@ def extract_media_info(filename: str, caption: str):
     season = episode = year = None
     tag = "#MOVIE"
     processed_raw = base_raw = filename
-    quality = get_qualities(caption_clean) or get_qualities(filename.lower()) or "N/A"
+    quality = get_qualities(filename, caption_clean)
     ott_platform = extract_ott_platform(f"{filename} {caption_clean}")
 
     lang_keys = {k for k in CAPTION_LANGUAGES if k in caption_clean or k in filename.lower()}
@@ -1005,7 +1008,7 @@ def generate_movie_message(movie_doc, base_name):
     # Show resolution qualities first, highest to lowest, then source/codec labels.
     # Example: 1080p, 720p, 480p, WEB-DL, HEVC.
     def quality_sort_key(label):
-        match = re.fullmatch(r"(\\d{3,4})p", str(label).strip(), re.IGNORECASE)
+        match = re.fullmatch(r"(\d{3,4})p", str(label).strip(), re.IGNORECASE)
         if match:
             return (0, -int(match.group(1)), "")
         return (1, 0, str(label).upper())
