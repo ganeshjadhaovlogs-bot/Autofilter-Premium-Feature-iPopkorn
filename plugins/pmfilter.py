@@ -2132,66 +2132,7 @@ async def auto_filter(client, msg, spoll=False):
         return
 
 
-@Client.on_callback_query(filters.regex(r"^request_movie_(-?\d+)_([0-9]+)$"))
-async def request_movie_callback(client: Client, query: CallbackQuery):
-    match = re.match(r"^request_movie_(-?\d+)_([0-9]+)$", query.data or "")
-    original = None
-    if match:
-        source_chat_id, source_message_id = int(match.group(1)), int(match.group(2))
-        try:
-            original = await client.get_messages(source_chat_id, source_message_id)
-        except Exception as fetch_error:
-            logger.exception("Could not fetch original movie request message: %s", fetch_error)
-    if (not original or getattr(original, "empty", False)) and query.message:
-        original = getattr(query.message, "reply_to_message", None)
-    if not original or not original.from_user:
-        return await query.answer("⚠️ Original search message is unavailable. Please search the movie again.", show_alert=True)
 
-    user = original.from_user
-    movie_name = (original.text or original.caption or "").strip()
-    username = f"@{user.username}" if user.username else "Not set"
-    chat_title = original.chat.title or original.chat.first_name or "Private chat"
-    requested_at = original.date.strftime("%d %b %Y, %I:%M %p UTC")
-
-    request_text = (
-        "<b>🎬 NEW MOVIE / SERIES REQUEST</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        f"<b>🔎 Requested title:</b> <code>{html.escape(movie_name or 'Not available')}</code>\n"
-        f"<b>👤 User:</b> {user.mention}\n"
-        f"<b>🆔 User ID:</b> <code>{user.id}</code>\n"
-        f"<b>🔗 Username:</b> {html.escape(username)}\n"
-        f"<b>💬 Chat:</b> {html.escape(chat_title)}\n"
-        f"<b>🆔 Chat ID:</b> <code>{original.chat.id}</code>\n"
-        f"<b>🕒 Requested:</b> {requested_at}\n"
-        "━━━━━━━━━━━━━━━━━━"
-    )
-
-    try:
-        await client.send_message(chat_id=-1005702299166, text=request_text, parse_mode=enums.ParseMode.HTML)
-        # Show a permanent confirmation in the user's chat, not only a brief callback alert.
-        await query.message.reply_text(
-            "✅ <b>Yᴏᴜʀ ᴍᴏᴠɪᴇ / sᴇʀɪᴇs ʀᴇǫᴜᴇsᴛ ʜᴀs ʙᴇᴇɴ sᴇɴᴛ ᴛᴏ ᴛʜᴇ ᴀᴅᴍɪɴ.</b>\n\n"
-            "📩 ᴛʜᴀɴᴋ ʏᴏᴜ! Wᴇ'ʟʟ ᴄʜᴇᴄᴋ ʏᴏᴜʀ ʀᴇǫᴜᴇsᴛ.",
-            reply_to_message_id=original.id,
-            parse_mode=enums.ParseMode.HTML
-        )
-        await query.answer("✅ Request sent successfully!")
-        await query.message.edit_reply_markup(
-            InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ ʀᴇǫᴜᴇsᴛ sᴇɴᴛ", callback_data="request_movie_sent")
-            ],[
-                InlineKeyboardButton("🔍 ᴄʜᴇᴄᴋ sᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ 🔍",
-                    url=f"https://www.google.com/search?q={quote_plus(movie_name)}")
-            ]])
-        )
-    except Exception as e:
-        logger.exception("Unable to send movie request to admin channel: %s", e)
-        await query.answer("❌ Request could not be sent. Check that the bot is an admin in the request channel and try again.", show_alert=True)
-
-
-@Client.on_callback_query(filters.regex(r"^request_movie_sent$"))
-async def request_movie_sent_callback(client: Client, query: CallbackQuery):
-    await query.answer("✅ Your request is already sent.")
 
 
 
@@ -2237,7 +2178,6 @@ async def advantage_spell_chok(client, message):
     if not movies:
         google = search.replace(" ", "+")
         button = [
-            [InlineKeyboardButton("📩 ʀᴇǫᴜᴇsᴛ ᴛʜɪs ᴍᴏᴠɪᴇ", callback_data=f"request_movie_{message.chat.id}_{message.id}")],
             [InlineKeyboardButton(
                 "🔍 ᴄʜᴇᴄᴋ sᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ 🔍", url=f"https://www.google.com/search?q={google}")]
         ]
