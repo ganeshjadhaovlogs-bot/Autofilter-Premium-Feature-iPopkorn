@@ -2132,11 +2132,20 @@ async def auto_filter(client, msg, spoll=False):
         return
 
 
-@Client.on_callback_query(filters.regex(r"^request_movie$"))
+@Client.on_callback_query(filters.regex(r"^request_movie_(-?\\d+)_([0-9]+)$"))
 async def request_movie_callback(client: Client, query: CallbackQuery):
-    original = query.message.reply_to_message
+    match = re.match(r"^request_movie_(-?\\d+)_([0-9]+)$", query.data or "")
+    original = None
+    if match:
+        source_chat_id, source_message_id = int(match.group(1)), int(match.group(2))
+        try:
+            original = await client.get_messages(source_chat_id, source_message_id)
+        except Exception as fetch_error:
+            logger.exception("Could not fetch original movie request message: %s", fetch_error)
+    if (not original or getattr(original, "empty", False)) and query.message:
+        original = getattr(query.message, "reply_to_message", None)
     if not original or not original.from_user:
-        return await query.answer("⚠️ Request details are no longer available. Please search again.", show_alert=True)
+        return await query.answer("⚠️ Original search message is unavailable. Please search the movie again.", show_alert=True)
 
     user = original.from_user
     movie_name = (original.text or original.caption or "").strip()
@@ -2228,7 +2237,7 @@ async def advantage_spell_chok(client, message):
     if not movies:
         google = search.replace(" ", "+")
         button = [
-            [InlineKeyboardButton("📩 ʀᴇǫᴜᴇsᴛ ᴛʜɪs ᴍᴏᴠɪᴇ", callback_data="request_movie")],
+            [InlineKeyboardButton("📩 ʀᴇǫᴜᴇsᴛ ᴛʜɪs ᴍᴏᴠɪᴇ", callback_data=f"request_movie_{message.chat.id}_{message.id}")],
             [InlineKeyboardButton(
                 "🔍 ᴄʜᴇᴄᴋ sᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ 🔍", url=f"https://www.google.com/search?q={google}")]
         ]
