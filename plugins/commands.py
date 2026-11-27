@@ -163,6 +163,8 @@ async def start(client, message):
         await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
     if len(message.command) != 2:
         buttons = [[
+                    InlineKeyboardButton('✧ Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ ✧', url=f'https://t.me/{temp.U_NAME}?startgroup=true')
+                ],[
                     InlineKeyboardButton('✧ Cʜᴀɴɴᴇʟ ✧', callback_data='channel'),
                     InlineKeyboardButton('✧ Gʀᴏᴜᴘ ✧', callback_data='ɢʀᴏᴜᴘ')
                 ],[
@@ -200,6 +202,8 @@ async def start(client, message):
 
     if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
         buttons = [[
+                    InlineKeyboardButton('✧ Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ ✧', url=f'https://t.me/{temp.U_NAME}?startgroup=true')
+                ],[
                     InlineKeyboardButton('✧ Cʜᴀɴɴᴇʟ ✧', callback_data='channel'),
                     InlineKeyboardButton('✧ Gʀᴏᴜᴘ ✧', callback_data='ɢʀᴏᴜᴘ')
                 ],[
