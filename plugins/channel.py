@@ -180,9 +180,9 @@ def format_runtime(value):
     return f"{hours}h {minutes}m" if hours and minutes else (f"{hours}h" if hours else f"{minutes}m")
 
 def extract_ott_platform(text: str) -> str:
-    text = text.lower()
-    platforms = {plat for key, plat in OTT_PLATFORMS.items() if key in text}
-    return " | ".join(platforms) if platforms else "N/A"
+    # Filename/caption keywords are not reliable proof of streaming availability.
+    # OTT values are populated only from TMDB's India watch-provider API.
+    return "N/A"
 
 
 def extract_languages(filename: str, caption: str = "") -> str:
@@ -510,9 +510,10 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             online_languages = tmdb_details.get("languages") or []
             if online_languages and movie_doc.get("online_languages") in (None, "", "N/A"):
                 updates["online_languages"] = ", ".join(str(item) for item in online_languages)
-            online_ott = tmdb_details.get("ott_platform")
-            if online_ott and movie_doc.get("ott_platform") in (None, "", "N/A"):
-                updates["ott_platform"] = online_ott
+            # Always replace any guessed/old OTT label with verified India data.
+            # A successful TMDB lookup with no providers means N/A, not a guess.
+            if tmdb_details and not tmdb_details.get("error"):
+                updates["ott_platform"] = tmdb_details.get("ott_platform") or "N/A"
 
             if imdb_details.get("url"):
                 updates["imdb_url"] = imdb_details["url"]
@@ -837,8 +838,10 @@ async def verify_movie_post_after_send(bot, base_name):
                         formatted = format_runtime(value)
                         if formatted:
                             updates["runtime"] = formatted
-                    elif field == "ott_platform" and movie_doc.get("ott_platform") in (None, "", "N/A"):
-                        updates["ott_platform"] = value
+                    elif field == "ott_platform":
+                        # IMDb/file names do not establish OTT availability.
+                        # Only the TMDB India provider result is authoritative.
+                        updates["ott_platform"] = tmdb.get("ott_platform") or "N/A"
                     elif field == "languages" and movie_doc.get("online_languages") in (None, "", "N/A"):
                         updates["online_languages"] = (value if isinstance(value, str)
                                                        else ", ".join(str(v) for v in value))
@@ -1265,7 +1268,13 @@ async def refresh_all_movie_metadata(bot, message):
 
                 rating = first_value(imdb_details.get("rating"), tmdb_details.get("rating"), movie_doc.get("rating"))
                 year = first_value(imdb_details.get("year"), tmdb_details.get("year"), movie_doc.get("year"))
-                ott = first_value(tmdb_details.get("ott_platform"), movie_doc.get("ott_platform"))
+                # Do not preserve stale filename-derived OTT labels.
+                # When TMDB responded successfully, use its India providers or N/A.
+                ott = (
+                    tmdb_details.get("ott_platform") or "N/A"
+                    if tmdb_details and not tmdb_details.get("error")
+                    else movie_doc.get("ott_platform") or "N/A"
+                )
                 imdb_id = first_value(imdb_details.get("imdb_id"), tmdb_details.get("imdb_id"))
                 imdb_url = first_value(
                     imdb_details.get("url"),
