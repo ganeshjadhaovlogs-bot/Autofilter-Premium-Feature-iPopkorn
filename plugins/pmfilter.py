@@ -1686,7 +1686,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             InlineKeyboardButton('UPDATE CHANNEL ִֶָ🔄', url='https://t.me/+xvBGsY_bn2s3NjA9'),
             InlineKeyboardButton('MAIN CHANNEL ִֶָ🍿', url='https://t.me/FilmsChor'),
             InlineKeyboardButton('MOVIE GROUP 🎟️', url='https://t.me/+LoJSMzUmcmQ2NWFl') 
-        ], [ InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data='about')
+        ], [ InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data='start')
         ]]
         reply_markup = InlineKeyboardMarkup(buttons)
         await query.message.edit_text(
