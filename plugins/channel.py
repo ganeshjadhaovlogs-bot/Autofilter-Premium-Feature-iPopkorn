@@ -1028,19 +1028,18 @@ def generate_movie_message(movie_doc, base_name):
     episodes_by_season = defaultdict(set)
 
     for file in movie_doc.get("files", []):
-        # Re-check both the stored quality and original filename/caption-derived
-        # text so older records and uploads with multiple tags are not missed.
-        # Announcement quality must come only from the original uploaded
-        # database filename. Do not infer it from processed titles, captions,
-        # cached quality fields, or external metadata.
-        uploaded_filename = str(file.get("filename") or "")
-        detected_qualities = get_qualities(uploaded_filename)
+        # Scan every quality-bearing value saved with the database file.
+        # Older records may have the tag in the cached quality, caption, or
+        # processed filename rather than the raw filename alone.
+        quality_source = " ".join(
+            str(file.get(key) or "")
+            for key in ("quality", "filename", "caption", "processed")
+        )
+        detected_qualities = get_qualities(quality_source)
         if detected_qualities != "N/A":
             for quality in detected_qualities.split(","):
                 quality = format_quality_label(quality.strip())
-                if re.fullmatch(r"(?:2160|1440|1080|720|540|480|360|240|140)P", quality):
-                    all_qualities.add(quality.lower())
-                elif quality in {"ORG", "WEB-DL", "WEBRIP", "BLURAY", "BRRIP", "HDRIP", "HDTV", "REMUX", "HDCAM", "HDTC", "CAMRIP", "DVDRIP"}:
+                if quality and quality != "N/A":
                     all_qualities.add(quality)
         if file["language"] != "N/A":
             all_languages.update(l.strip() for l in file["language"].split(",") if l.strip())
@@ -1127,11 +1126,10 @@ def generate_movie_message(movie_doc, base_name):
         return (1, 0, str(label).upper())
 
     ordered_qualities = sorted(all_qualities, key=quality_sort_key)
-    # Keep the caption short while reflecting actual uploaded file names:
-    # up to three resolutions and up to two recognized source labels.
+    # Keep the same compact channel caption: up to three resolutions and
+    # up to two source/format tags, while scanning all database file fields.
     resolution_labels = [item for item in ordered_qualities if re.fullmatch(r"\d{3,4}p", item, re.I)][:3]
-    source_order = ("ORG", "WEB-DL", "WEBRIP", "BLURAY", "BRRIP", "HDRIP", "HDTV", "REMUX", "HDCAM", "HDTC", "CAMRIP", "DVDRIP")
-    source_labels = [item for item in source_order if item in all_qualities][:2]
+    source_labels = [item for item in ordered_qualities if not re.fullmatch(r"\d{3,4}p", item, re.I)][:2]
     quality_str = ", ".join(resolution_labels + source_labels) if (resolution_labels or source_labels) else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     # Only show up to two distinct, verified India providers. Never reuse
