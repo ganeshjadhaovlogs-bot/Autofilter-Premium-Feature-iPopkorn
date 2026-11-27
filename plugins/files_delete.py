@@ -5,7 +5,7 @@
 import re
 import logging
 from pyrogram import Client, filters
-from info import DELETE_CHANNELS
+from info import DELETE_CHANNELS, CHANNELS
 from database.ia_filterdb import Media, Media2, unpack_new_file_id
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,15 @@ media_filter = filters.document | filters.video | filters.audio
 @Client.on_message(filters.chat(DELETE_CHANNELS) & media_filter)
 async def deletemultiplemedia(bot, message):
     """Delete Multiple files from database"""
+
+    # A source/database upload channel must never be treated as a delete channel.
+    # If the same chat ID is configured in both lists, preserve new uploads.
+    if message.chat and message.chat.id in CHANNELS:
+        logger.info(
+            "Ignoring delete-channel handler for source upload channel %s",
+            message.chat.id
+        )
+        return
 
     for file_type in ("document", "video", "audio"):
         media = getattr(message, file_type, None)
