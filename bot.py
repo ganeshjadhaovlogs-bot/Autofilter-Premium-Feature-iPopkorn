@@ -62,9 +62,13 @@ async def roaroicbot_start():
             if not commands_result.get("ok"):
                 logging.warning("Could not register Telegram bot commands: %s", commands_result)
 
+            # Explicitly reset the DEFAULT menu button to Commands (never a Web App/URL).
             menu_response = await session.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/setChatMenuButton",
-                json={"menu_button": {"type": "commands"}}
+                json={
+                    "scope": {"type": "default"},
+                    "menu_button": {"type": "commands"}
+                }
             )
             menu_result = await menu_response.json()
             if menu_result.get("ok"):
@@ -88,6 +92,26 @@ async def roaroicbot_start():
             spec.loader.exec_module(load)
             sys.modules["plugins." + plugin_name] = load
             print("Roaroic Imported => " + plugin_name)
+
+    # Re-assert the default Commands menu after every plugin has initialized.
+    # This overrides any default URL/Web App menu-button setting at startup.
+    try:
+        async with aiohttp.ClientSession() as session:
+            response = await session.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/setChatMenuButton",
+                json={
+                    "scope": {"type": "default"},
+                    "menu_button": {"type": "commands"}
+                }
+            )
+            result = await response.json()
+            if result.get("ok"):
+                logging.info("Default Telegram menu button locked to Commands after plugin initialization.")
+            else:
+                logging.error("Could not enforce default Commands menu button: %s", result)
+    except Exception:
+        logging.exception("Failed to enforce default Telegram Commands menu button.")
+
     if ON_HEROKU or ON_RENDER:
         asyncio.create_task(ping_server())
     b_users, b_chats = await db.get_banned()
