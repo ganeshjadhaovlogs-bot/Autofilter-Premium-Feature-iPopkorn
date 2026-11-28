@@ -35,7 +35,7 @@ BATCH_FILES = {}
 
 
 LANGUAGES = {
-    "en": ("🇬🇧 English", "🌐 CHOOSE YOUR LANGUAGE", "Select the language you want the bot to use.", "ADD ME TO YOUR GROUP", "CHANNEL", "GROUP", "HELP", "ABOUT ME", "TRENDING", "PREMIUM", "LANGUAGE", "ADMIN PANEL", "GOOD MORNING 🌞", "GOOD AFTERNOON 🌓", "GOOD EVENING 🌘", "GOOD NIGHT 🌑"),
+    "en": ("🇬🇧 English", "🌐 CHOOSE YOUR LANGUAGE", "Select the language you want the bot to use.", "Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ", "Cʜᴀɴɴᴇʟ", "Gʀᴏᴜᴘ", "Hᴇʟᴘ", "Aʙᴏᴜᴛ Mᴇ", "Tʀᴇɴᴅɪɴɢ", "Pʀᴇᴍɪᴜᴍ", "Lᴀɴɢᴜᴀɢᴇ", "ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ", "ɢᴏᴏᴅ ᴍᴏʀɴɪɴɢ 🌞", "ɢᴏᴏᴅ ᴀғᴛᴇʀɴᴏᴏɴ 🌓", "ɢᴏᴏᴅ ᴇᴠᴇɴɪɴɢ 🌘", "ɢᴏᴏᴅ ɴɪɢʜᴛ 🌑"),
     "hi": ("🇮🇳 Hindi", "🌐 अपनी भाषा चुनें", "बॉट की भाषा चुनें। आप इसे कभी भी बदल सकते हैं।", "ग्रुप में जोड़ें", "चैनल", "ग्रुप", "मदद", "मेरे बारे में", "ट्रेंडिंग", "प्रीमियम", "भाषा", "एडमिन पैनल", "सुप्रभात 🌞", "शुभ दोपहर 🌓", "शुभ संध्या 🌘", "शुभ रात्रि 🌑"),
     "ta": ("🇮🇳 Tamil", "🌐 மொழியைத் தேர்ந்தெடுக்கவும்", "பாட்டின் மொழியைத் தேர்ந்தெடுக்கவும். எப்போது வேண்டுமானாலும் மாற்றலாம்.", "குழுவில் சேர்க்கவும்", "சேனல்", "குழு", "உதவி", "என்னைப் பற்றி", "டிரெண்டிங்", "பிரீமியம்", "மொழி", "நிர்வாகம்", "காலை வணக்கம் 🌞", "மதிய வணக்கம் 🌓", "மாலை வணக்கம் 🌘", "இரவு வணக்கம் 🌑"),
     "te": ("🇮🇳 Telugu", "🌐 మీ భాషను ఎంచుకోండి", "బాట్ ఉపయోగించే భాషను ఎంచుకోండి. ఎప్పుడైనా మార్చవచ్చు.", "గ్రూప్‌లో చేర్చండి", "ఛానల్", "గ్రూప్", "సహాయం", "నా గురించి", "ట్రెండింగ్", "ప్రీమియం", "భాష", "అడ్మిన్ ప్యానెల్", "శుభోదయం 🌞", "శుభ మధ్యాహ్నం 🌓", "శుభ సాయంత్రం 🌘", "శుభ రాత్రి 🌑"),
@@ -82,7 +82,7 @@ async def _send_language_home(client, message, user, language):
     ]
     if user.id in ADMINS:
         buttons.append([InlineKeyboardButton(f"👑 {lang[11]} 👑", callback_data="ap:home")])
-    caption = f"<b>👋 ʜᴇʏ {user.mention}, {greeting}</b>\n\n<blockquote>Mʏ Nᴀᴍᴇ Is <a href=\"https://t.me/{temp.U_NAME}\">{temp.B_NAME}</a>, I Cᴀɴ Hᴇʟᴘ Yᴏᴜ Fɪɴᴅ Mᴏᴠɪᴇs Aɴᴅ Sᴇʀɪᴇs.</blockquote>"
+    caption = script.START_TXT.format(user.mention, greeting, temp.U_NAME, temp.B_NAME)
     await client.send_photo(chat_id=message.chat.id, photo=random.choice(PICS), caption=caption, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
 
 
