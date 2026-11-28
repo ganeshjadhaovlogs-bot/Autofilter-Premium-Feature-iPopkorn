@@ -111,7 +111,7 @@ def remove_ignored_words(text: str) -> str:
 
 def wrap_caption_value(value, width=24, indent=18):
     """Wrap long announcement values so they stay within their own caption field."""
-    value = re.sub(r"\\s+", " ", str(value or "N/A")).strip()
+    value = re.sub(r"\s+", " ", str(value or "N/A")).strip()
     if not value:
         return "N/A"
     words = value.split(" ")
@@ -126,7 +126,7 @@ def wrap_caption_value(value, width=24, indent=18):
             current = candidate
     if current:
         lines.append(current)
-    return ("\\n" + (" " * indent)).join(lines)
+    return ("\n" + (" " * indent)).join(lines)
 
 
 def format_quality_label(value: str) -> str:
