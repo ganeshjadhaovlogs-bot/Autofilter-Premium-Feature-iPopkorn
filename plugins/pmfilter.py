@@ -1728,7 +1728,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             btn = [[
                 InlineKeyboardButton('• ' + await _ui_label(query.from_user.id, 'buy') + ' •', callback_data='buy_info'),
             ],[
-                InlineKeyboardButton('• ʀᴇꜰᴇʀ ꜰʀɪᴇɴᴅꜱ', callback_data='reffff'),
+                InlineKeyboardButton('• ' + await _ui_label(query.from_user.id, 'refer') + ' •', callback_data='reffff'),
                 InlineKeyboardButton(await _ui_label(query.from_user.id, 'trial') + ' •', callback_data='give_trial')
             ],[
                 InlineKeyboardButton('⇋ ' + await _ui_label(query.from_user.id, 'home') + ' ⇋', callback_data='start')
