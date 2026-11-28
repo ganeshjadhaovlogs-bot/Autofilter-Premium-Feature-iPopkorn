@@ -6,7 +6,7 @@ import re
 import logging
 import asyncio
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -304,29 +304,91 @@ def extract_media_info(filename: str, caption: str):
         "language": language
     }
 
+async def scan_matching_movie_uploads(bot, source_chat_id, target_base_name, current_message):
+    """Re-scan recent Telegram source-channel uploads for this movie only."""
+    cutoff = current_message.date - timedelta(hours=24)
+    scanned = matched = 0
+
+    async for item in bot.get_chat_history(source_chat_id, limit=1000):
+        if item.date and item.date < cutoff:
+            break
+
+        media_type = next(
+            (ft for ft in ("document", "video", "audio") if getattr(item, ft, None)),
+            None
+        )
+        if not media_type:
+            continue
+
+        media = getattr(item, media_type)
+        filename = getattr(media, "file_name", None)
+        if not filename:
+            continue
+
+        caption = item.caption or ""
+        info = extract_media_info(filename, caption)
+        if info["base_name"].casefold() != target_base_name.casefold():
+            continue
+
+        matched += 1
+        media.file_type = media_type
+        media.caption = caption
+        media.duration = getattr(media, "duration", None)
+
+        # info=0 means the file already exists in MongoDB. Still process it:
+        # this repairs a missed movie_updates record without duplicating the file.
+        success, save_status = await save_file(media)
+        if not success and save_status not in (0,):
+            logger.warning("Could not index matching source file '%s' (status %s)", filename, save_status)
+            continue
+
+        await process_and_send_update(
+            bot, filename, caption, media.duration
+        )
+        scanned += 1
+
+    logger.info(
+        "Matching Telegram scan completed for '%s': %s/%s matching files processed (last 24h)",
+        target_base_name, scanned, matched
+    )
+
+
 @Client.on_message(filters.chat(CHANNELS) & MEDIA_FILTER)
 async def media_handler(bot, message):
-    media = next(
-        (getattr(message, ft) for ft in ("document", "video", "audio")
-         if getattr(message, ft, None)),
+    media_type = next(
+        (ft for ft in ("document", "video", "audio") if getattr(message, ft, None)),
         None
     )
-    if not media:
+    if not media_type:
         return
 
-    media.file_type = next(ft for ft in ("document", "video", "audio") if hasattr(message, ft))
-    media.caption = message.caption or ""
+    media = getattr(message, media_type)
+    filename = getattr(media, "file_name", None)
+    if not filename:
+        return
+
+    caption = message.caption or ""
+    media.file_type = media_type
+    media.caption = caption
     # Telegram supplies the actual duration (seconds) for uploaded video/audio media.
     media.duration = getattr(media, "duration", None)
-    success, info = await save_file(media)
-    if not success:
-        return
 
     try:
-        if await db.movie_update_status(bot.me.id):
-            await process_and_send_update(bot, media.file_name, media.caption, media.duration)
+        if not await db.movie_update_status(bot.me.id):
+            return
+
+        # Save the triggering upload, then scan only its matching movie in the
+        # source Telegram channel. Other movie titles are never processed here.
+        success, save_status = await save_file(media)
+        if not success and save_status not in (0,):
+            return
+
+        target_base_name = extract_media_info(filename, caption)["base_name"]
+        await scan_matching_movie_uploads(
+            bot, message.chat.id, target_base_name, message
+        )
     except Exception:
-        logger.exception("Error processing media")
+        logger.exception("Error processing/scanning matching movie uploads")
 
 async def process_and_send_update(bot, filename, caption, duration_seconds=None):
     try:
