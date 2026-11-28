@@ -1127,7 +1127,7 @@ def generate_movie_message(movie_doc, base_name):
 
     ordered_qualities = sorted(all_qualities, key=quality_sort_key)
     # Channel quality is limited to common resolutions and approved source tags.
-    resolution_order = ("2160p", "1080p", "720p", "480p")
+    resolution_order = ("480p", "720p", "1080p", "2160p")
     resolution_labels = [item for item in resolution_order if item in all_qualities]
     source_order = ("WEB-DL", "HDT", "HEVC", "ORG", "HDRIP")
     source_labels = [item for item in source_order if item in all_qualities]
@@ -1146,15 +1146,15 @@ def generate_movie_message(movie_doc, base_name):
     if year and str(year) not in str(display_title):
         display_title = f"{display_title} ({year})"
 
-    # Wrap every field value independently; continuation lines align under
-    # the value instead of spilling into the next caption field.
-    display_title = wrap_caption_value(display_title, width=30, indent=12)
-    genres = wrap_caption_value(genres, width=24, indent=18)
-    ott_str = wrap_caption_value(ott_str, width=24, indent=18)
-    runtime = wrap_caption_value(runtime, width=24, indent=18)
-    quality_str = wrap_caption_value(quality_str, width=24, indent=18)
-    language_str = wrap_caption_value(language_str, width=24, indent=18)
-    rating = wrap_caption_value(rating, width=24, indent=18)
+    # Keep every announcement field on a single line; collapse embedded
+    # whitespace/newlines from metadata before inserting it into the caption.
+    display_title = re.sub(r"\\s+", " ", str(display_title or "N/A")).strip() or "N/A"
+    genres = re.sub(r"\\s+", " ", str(genres or "N/A")).strip() or "N/A"
+    ott_str = re.sub(r"\\s+", " ", str(ott_str or "N/A")).strip() or "N/A"
+    runtime = re.sub(r"\\s+", " ", str(runtime or "N/A")).strip() or "N/A"
+    quality_str = re.sub(r"\\s+", " ", str(quality_str or "N/A")).strip() or "N/A"
+    language_str = re.sub(r"\\s+", " ", str(language_str or "N/A")).strip() or "N/A"
+    rating = re.sub(r"\\s+", " ", str(rating or "N/A")).strip() or "N/A"
 
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
