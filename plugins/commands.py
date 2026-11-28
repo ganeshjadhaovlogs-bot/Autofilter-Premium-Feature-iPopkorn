@@ -1547,11 +1547,13 @@ async def change_language_command(client, message):
 @Client.on_callback_query(filters.regex(r"^lang:change$"))
 async def change_language_callback(client, query):
     await query.answer()
-    await query.message.edit_text(
-        "<b>🌐 CHOOSE YOUR LANGUAGE</b>\n\nSELECT THE LANGUAGE YOU WANT THE BOT TO USE.\n\nYOU CAN CHANGE IT ANYTIME.",
-        reply_markup=_language_keyboard(query.from_user.id),
-        parse_mode=enums.ParseMode.HTML
-    )
+    # Remove the old-language Home message before showing the picker.
+    try:
+        await query.message.delete()
+    except Exception as e:
+        logger.warning(f"Could not delete old language menu: {e}")
+    await _show_language_picker(query.message, query.from_user.id)
+
 
 @Client.on_callback_query(filters.regex(r"^lang:set:([a-z]{2}):(\d+)$"))
 async def set_language_callback(client, query):
