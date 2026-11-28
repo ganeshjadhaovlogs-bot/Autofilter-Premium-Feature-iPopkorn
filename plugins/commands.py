@@ -33,6 +33,59 @@ logger = logging.getLogger(__name__)
 TIMEZONE = "Asia/Kolkata"
 BATCH_FILES = {}
 
+
+LANGUAGES = {
+    "en": ("🇬🇧 English", "🌐 CHOOSE YOUR LANGUAGE", "Select the language you want the bot to use.", "ADD ME TO YOUR GROUP", "CHANNEL", "GROUP", "HELP", "ABOUT ME", "TRENDING", "PREMIUM", "LANGUAGE", "ADMIN PANEL", "GOOD MORNING 🌞", "GOOD AFTERNOON 🌓", "GOOD EVENING 🌘", "GOOD NIGHT 🌑"),
+    "hi": ("🇮🇳 Hindi", "🌐 अपनी भाषा चुनें", "बॉट की भाषा चुनें। आप इसे कभी भी बदल सकते हैं।", "ग्रुप में जोड़ें", "चैनल", "ग्रुप", "मदद", "मेरे बारे में", "ट्रेंडिंग", "प्रीमियम", "भाषा", "एडमिन पैनल", "सुप्रभात 🌞", "शुभ दोपहर 🌓", "शुभ संध्या 🌘", "शुभ रात्रि 🌑"),
+    "ta": ("🇮🇳 Tamil", "🌐 மொழியைத் தேர்ந்தெடுக்கவும்", "பாட்டின் மொழியைத் தேர்ந்தெடுக்கவும். எப்போது வேண்டுமானாலும் மாற்றலாம்.", "குழுவில் சேர்க்கவும்", "சேனல்", "குழு", "உதவி", "என்னைப் பற்றி", "டிரெண்டிங்", "பிரீமியம்", "மொழி", "நிர்வாகம்", "காலை வணக்கம் 🌞", "மதிய வணக்கம் 🌓", "மாலை வணக்கம் 🌘", "இரவு வணக்கம் 🌑"),
+    "te": ("🇮🇳 Telugu", "🌐 మీ భాషను ఎంచుకోండి", "బాట్ ఉపయోగించే భాషను ఎంచుకోండి. ఎప్పుడైనా మార్చవచ్చు.", "గ్రూప్‌లో చేర్చండి", "ఛానల్", "గ్రూప్", "సహాయం", "నా గురించి", "ట్రెండింగ్", "ప్రీమియం", "భాష", "అడ్మిన్ ప్యానెల్", "శుభోదయం 🌞", "శుభ మధ్యాహ్నం 🌓", "శుభ సాయంత్రం 🌘", "శుభ రాత్రి 🌑"),
+    "kn": ("🇮🇳 Kannada", "🌐 ನಿಮ್ಮ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ", "ಬಾಟ್ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ. ಯಾವಾಗ ಬೇಕಾದರೂ ಬದಲಾಯಿಸಬಹುದು.", "ಗುಂಪಿಗೆ ಸೇರಿಸಿ", "ಚಾನೆಲ್", "ಗುಂಪು", "ಸಹಾಯ", "ನನ್ನ ಬಗ್ಗೆ", "ಟ್ರೆಂಡಿಂಗ್", "ಪ್ರೀಮಿಯಂ", "ಭಾಷೆ", "ನಿರ್ವಾಹಕ ಫಲಕ", "ಶುಭೋದಯ 🌞", "ಶುಭ ಮಧ್ಯಾಹ್ನ 🌓", "ಶುಭ ಸಂಜೆ 🌘", "ಶುಭ ರಾತ್ರಿ 🌑"),
+    "ml": ("🇮🇳 Malayalam", "🌐 നിങ്ങളുടെ ഭാഷ തിരഞ്ഞെടുക്കുക", "ബോട്ട് ഉപയോഗിക്കേണ്ട ഭാഷ തിരഞ്ഞെടുക്കുക. എപ്പോൾ വേണമെങ്കിലും മാറ്റാം.", "ഗ്രൂപ്പിൽ ചേർക്കുക", "ചാനൽ", "ഗ്രൂപ്പ്", "സഹായം", "എന്നെക്കുറിച്ച്", "ട്രെൻഡിംഗ്", "പ്രീമിയം", "ഭാഷ", "അഡ്മിൻ പാനൽ", "സുപ്രഭാതം 🌞", "ശുഭ ഉച്ചയ്ക്ക് 🌓", "ശുഭ സായാഹ്നം 🌘", "ശുഭ രാത്രി 🌑"),
+    "bn": ("🇮🇳 Bengali", "🌐 আপনার ভাষা নির্বাচন করুন", "বটের ভাষা নির্বাচন করুন। যেকোনো সময় পরিবর্তন করতে পারবেন।", "গ্রুপে যোগ করুন", "চ্যানেল", "গ্রুপ", "সাহায্য", "আমার সম্পর্কে", "ট্রেন্ডিং", "প্রিমিয়াম", "ভাষা", "অ্যাডমিন প্যানেল", "সুপ্রভাত 🌞", "শুভ দুপুর 🌓", "শুভ সন্ধ্যা 🌘", "শুভ রাত্রি 🌑"),
+    "mr": ("🇮🇳 Marathi", "🌐 तुमची भाषा निवडा", "बॉटची भाषा निवडा. तुम्ही ती कधीही बदलू शकता.", "ग्रुपमध्ये जोडा", "चॅनेल", "ग्रुप", "मदत", "माझ्याबद्दल", "ट्रेंडिंग", "प्रीमियम", "भाषा", "ॲडमिन पॅनेल", "शुभ सकाळ 🌞", "शुभ दुपार 🌓", "शुभ संध्याकाळ 🌘", "शुभ रात्री 🌑"),
+    "gu": ("🇮🇳 Gujarati", "🌐 તમારી ભાષા પસંદ કરો", "બોટની ભાષા પસંદ કરો. તમે તેને ક્યારે પણ બદલી શકો છો.", "ગ્રુપમાં ઉમેરો", "ચેનલ", "ગ્રુપ", "મદદ", "મારા વિશે", "ટ્રેન્ડિંગ", "પ્રીમિયમ", "ભાષા", "એડમિન પેનલ", "સુપ્રભાત 🌞", "શુભ બપોર 🌓", "શુભ સાંજ 🌘", "શુભ રાત્રિ 🌑"),
+    "pa": ("🇮🇳 Punjabi", "🌐 ਆਪਣੀ ਭਾਸ਼ਾ ਚੁਣੋ", "ਬੋਟ ਦੀ ਭਾਸ਼ਾ ਚੁਣੋ। ਤੁਸੀਂ ਇਸਨੂੰ ਕਦੇ ਵੀ ਬਦਲ ਸਕਦੇ ਹੋ।", "ਗਰੁੱਪ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰੋ", "ਚੈਨਲ", "ਗਰੁੱਪ", "ਮਦਦ", "ਮੇਰੇ ਬਾਰੇ", "ਟ੍ਰੈਂਡਿੰਗ", "ਪ੍ਰੀਮੀਅਮ", "ਭਾਸ਼ਾ", "ਐਡਮਿਨ ਪੈਨਲ", "ਸ਼ੁਭ ਸਵੇਰ 🌞", "ਸ਼ੁਭ ਦੁਪਹਿਰ 🌓", "ਸ਼ੁਭ ਸ਼ਾਮ 🌘", "ਸ਼ੁਭ ਰਾਤ 🌑"),
+    "ur": ("🇮🇳 Urdu", "🌐 اپنی زبان منتخب کریں", "بوٹ کی زبان منتخب کریں۔ آپ اسے کبھی بھی تبدیل کر سکتے ہیں۔", "گروپ میں شامل کریں", "چینل", "گروپ", "مدد", "میرے بارے میں", "ٹرینڈنگ", "پریمیم", "زبان", "ایڈمن پینل", "صبح بخیر 🌞", "دوپہر بخیر 🌓", "شام بخیر 🌘", "شب بخیر 🌑"),
+    "as": ("🇮🇳 Assamese", "🌐 আপোনাৰ ভাষা বাছনি কৰক", "বটৰ ভাষা বাছনি কৰক। যিকোনো সময়তে সলনি কৰিব পাৰিব।", "গ্ৰুপত যোগ কৰক", "চেনেল", "গ্ৰুপ", "সহায়", "মোৰ বিষয়ে", "ট্ৰেণ্ডিং", "প্ৰিমিয়াম", "ভাষা", "এডমিন পেনেল", "সুপ্ৰভাত 🌞", "শুভ দুপৰীয়া 🌓", "শুভ সন্ধিয়া 🌘", "শুভ ৰাতি 🌑"),
+    "ne": ("🇳🇵 Nepali", "🌐 आफ्नो भाषा छान्नुहोस्", "बोटको भाषा छान्नुहोस्। जुनसुकै बेला परिवर्तन गर्न सक्नुहुन्छ।", "समूहमा थप्नुहोस्", "च्यानल", "समूह", "मद्दत", "मेरो बारेमा", "ट्रेन्डिङ", "प्रिमियम", "भाषा", "एडमिन प्यानल", "शुभ प्रभात 🌞", "शुभ दिउँसो 🌓", "शुभ साँझ 🌘", "शुभ रात्री 🌑"),
+    "hl": ("🇮🇳 Hinglish", "🌐 APNI LANGUAGE CHOOSE KARO", "Bot ki language choose karo. Baad mein kabhi bhi change kar sakte ho.", "GROUP ME ADD KARO", "CHANNEL", "GROUP", "HELP", "ABOUT ME", "TRENDING", "PREMIUM", "LANGUAGE", "ADMIN PANEL", "GOOD MORNING 🌞", "GOOD AFTERNOON 🌓", "GOOD EVENING 🌘", "GOOD NIGHT 🌑"),
+}
+
+def _language_keyboard(user_id):
+    order = ["en", "hi", "ta", "te", "kn", "ml", "bn", "mr", "gu", "pa", "ur", "as", "ne", "hl"]
+    rows = []
+    for i in range(0, len(order), 2):
+        rows.append([
+            InlineKeyboardButton(LANGUAGES[code][0], callback_data=f"lang:set:{code}:{user_id}")
+            for code in order[i:i + 2]
+        ])
+    return InlineKeyboardMarkup(rows)
+
+async def _show_language_picker(message, user_id):
+    await message.reply_text(
+        "<b>🌐 CHOOSE YOUR LANGUAGE</b>\n\nSELECT THE LANGUAGE YOU WANT THE BOT TO USE.\n\nYOU CAN CHANGE IT ANYTIME.",
+        reply_markup=_language_keyboard(user_id),
+        parse_mode=enums.ParseMode.HTML
+    )
+
+async def _send_language_home(client, message, user, language):
+    lang = LANGUAGES.get(language, LANGUAGES["en"])
+    current_time = datetime.now(pytz.timezone(TIMEZONE))
+    hour = current_time.hour
+    greeting = lang[12] if hour < 12 else lang[13] if hour < 17 else lang[14] if hour < 21 else lang[15]
+    buttons = [
+        [InlineKeyboardButton(f"✧ {lang[3]} ✧", url=f"https://t.me/{temp.U_NAME}?startgroup=true")],
+        [InlineKeyboardButton(f"✧ {lang[4]} ✧", callback_data="channel"), InlineKeyboardButton(f"✧ {lang[5]} ✧", callback_data="ɢʀᴏᴜᴘ")],
+        [InlineKeyboardButton(f"✧ {lang[6]} ✧", callback_data="help"), InlineKeyboardButton(f"✧ {lang[7]} ✧", callback_data="about")],
+        [InlineKeyboardButton(f"✧ {lang[8]} ✧", callback_data="topsearch"), InlineKeyboardButton(f"✧ {lang[9]} ✧", callback_data="premium_info")],
+        [InlineKeyboardButton(f"🌐 {lang[10]}", callback_data="lang:change")]
+    ]
+    if user.id in ADMINS:
+        buttons.append([InlineKeyboardButton(f"👑 {lang[11]} 👑", callback_data="ap:home")])
+    caption = f"<b>👋 ʜᴇʏ {user.mention}, {greeting}</b>\n\n<blockquote>Mʏ Nᴀᴍᴇ Is <a href=\"https://t.me/{temp.U_NAME}\">{temp.B_NAME}</a>, I Cᴀɴ Hᴇʟᴘ Yᴏᴜ Fɪɴᴅ Mᴏᴠɪᴇs Aɴᴅ Sᴇʀɪᴇs.</blockquote>"
+    await message.reply_photo(photo=random.choice(PICS), caption=caption, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
+
+
 @Client.on_message(filters.command("start") & filters.incoming)
 async def start(client, message):
     if EMOJI_MODE:
@@ -161,78 +214,20 @@ async def start(client, message):
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
         await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
-    if len(message.command) != 2:
-        buttons = [[
-                    InlineKeyboardButton('✧ Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ ✧', url=f'https://t.me/{temp.U_NAME}?startgroup=true')
-                ],[
-                    InlineKeyboardButton('✧ Cʜᴀɴɴᴇʟ ✧', callback_data='channel'),
-                    InlineKeyboardButton('✧ Gʀᴏᴜᴘ ✧', callback_data='ɢʀᴏᴜᴘ')
-                ],[
-                    InlineKeyboardButton('✧ Hᴇʟᴘ ✧', callback_data='help'),
-                    InlineKeyboardButton('✧ Aʙᴏᴜᴛ Mᴇ ✧', callback_data='about')
-                ],[
-                    InlineKeyboardButton('✧ Tʀᴇɴᴅɪɴɢ ✧', callback_data="topsearch"),
-                    InlineKeyboardButton('✧ Pʀᴇᴍɪᴜᴍ ✧', callback_data="premium_info"),
-                ]]
-        if message.from_user.id in ADMINS:
-            buttons.append([InlineKeyboardButton('👑 ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ 👑', callback_data='ap:home')])
-        reply_markup = InlineKeyboardMarkup(buttons)
-        current_time = datetime.now(pytz.timezone(TIMEZONE))
-        curr_time = current_time.hour        
-        if curr_time < 12:
-            gtxt = "ɢᴏᴏᴅ ᴍᴏʀɴɪɴɢ 🌞" 
-        elif curr_time < 17:
-            gtxt = "ɢᴏᴏᴅ ᴀғᴛᴇʀɴᴏᴏɴ 🌓" 
-        elif curr_time < 21:
-            gtxt = "ɢᴏᴏᴅ ᴇᴠᴇɴɪɴɢ 🌘"
-        else:
-            gtxt = "ɢᴏᴏᴅ ɴɪɢʜᴛ 🌑"
-        m=await message.reply_text("⏳")
-        await asyncio.sleep(0.4)
-        await m.delete()        
-        await message.reply_photo(
-            photo=random.choice(PICS),
-            caption=script.START_TXT.format(message.from_user.mention, gtxt, temp.U_NAME, temp.B_NAME),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+    if len(message.command) == 1:
+        language = await db.get_language(message.from_user.id)
+        if not language:
+            await _show_language_picker(message, message.from_user.id)
+            return
+        await _send_language_home(client, message, message.from_user, language)
         return
 
     if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
-        buttons = [[
-                    InlineKeyboardButton('✧ Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ ✧', url=f'https://t.me/{temp.U_NAME}?startgroup=true')
-                ],[
-                    InlineKeyboardButton('✧ Cʜᴀɴɴᴇʟ ✧', callback_data='channel'),
-                    InlineKeyboardButton('✧ Gʀᴏᴜᴘ ✧', callback_data='ɢʀᴏᴜᴘ')
-                ],[
-                    InlineKeyboardButton('✧ Hᴇʟᴘ ✧', callback_data='help'),
-                    InlineKeyboardButton('✧ Aʙᴏᴜᴛ Mᴇ ✧', callback_data='about')
-                ],[
-                    InlineKeyboardButton('✧ Tʀᴇɴᴅɪɴɢ ✧', callback_data="topsearch"),
-                    InlineKeyboardButton('✧ Pʀᴇᴍɪᴜᴍ ✧', callback_data="premium_info"),
-                ]]
-        if message.from_user.id in ADMINS:
-            buttons.append([InlineKeyboardButton('👑 ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ 👑', callback_data='ap:home')])
-        reply_markup = InlineKeyboardMarkup(buttons)
-        current_time = datetime.now(pytz.timezone(TIMEZONE))
-        curr_time = current_time.hour        
-        if curr_time < 12:
-            gtxt = "ɢᴏᴏᴅ ᴍᴏʀɴɪɴɢ 🌞" 
-        elif curr_time < 17:
-            gtxt = "ɢᴏᴏᴅ ᴀғᴛᴇʀɴᴏᴏɴ 🌓" 
-        elif curr_time < 21:
-            gtxt = "ɢᴏᴏᴅ ᴇᴠᴇɴɪɴɢ 🌘"
-        else:
-            gtxt = "ɢᴏᴏᴅ ɴɪɢʜᴛ 🌑"
-        m=await message.reply_text("⏳")
-        await asyncio.sleep(0.4)
-        await m.delete()        
-        await message.reply_photo(
-            photo=random.choice(PICS),
-            caption=script.START_TXT.format(message.from_user.mention, gtxt, temp.U_NAME, temp.B_NAME),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        language = await db.get_language(message.from_user.id)
+        if not language:
+            await _show_language_picker(message, message.from_user.id)
+            return
+        await _send_language_home(client, message, message.from_user, language)
         return
     if message.command[1].startswith("reff_"):
         try:
@@ -1533,3 +1528,31 @@ async def reset_trial(client, message):
         await message.reply_text(message_text)
     except Exception as e:
         await message.reply_text(f"An error occurred: {e}")
+
+
+@Client.on_message(filters.command("language") & filters.private)
+async def change_language_command(client, message):
+    await _show_language_picker(message, message.from_user.id)
+
+@Client.on_callback_query(filters.regex(r"^lang:change$"))
+async def change_language_callback(client, query):
+    await query.answer()
+    await query.message.edit_text(
+        "<b>🌐 CHOOSE YOUR LANGUAGE</b>\n\nSELECT THE LANGUAGE YOU WANT THE BOT TO USE.\n\nYOU CAN CHANGE IT ANYTIME.",
+        reply_markup=_language_keyboard(query.from_user.id),
+        parse_mode=enums.ParseMode.HTML
+    )
+
+@Client.on_callback_query(filters.regex(r"^lang:set:([a-z]{2}):(\d+)$"))
+async def set_language_callback(client, query):
+    match = query.matches[0]
+    language, owner_id = match.group(1), int(match.group(2))
+    if query.from_user.id != owner_id:
+        return await query.answer("This language menu is not for you.", show_alert=True)
+    if language not in LANGUAGES:
+        return await query.answer("Invalid language.", show_alert=True)
+    await db.set_language(owner_id, language)
+    await query.answer("Language saved!")
+    user = query.from_user
+    await query.message.delete()
+    await _send_language_home(client, query.message, user, language)
