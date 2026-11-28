@@ -74,12 +74,29 @@ _UI_LABELS = {
  "ne": {"add":"समूहमा थप्नुहोस्","channel":"च्यानल","group":"समूह","help":"मद्दत","about":"मेरो बारेमा","trending":"ट्रेन्डिङ","premium":"प्रिमियम","language":"भाषा","admin":"एडमिन प्यानल","home":"होममा फर्कनुहोस्","back":"पछाडि","chat":"एडमिनसँग कुरा गर्नुहोस्","disclaimer":"अस्वीकरण","source":"स्रोत","donation":"दान","buy":"प्रिमियम किन्नुहोस्","refer":"साथीहरूलाई बोलाउनुहोस्","trial":"निःशुल्क परीक्षण","quality":"गुणस्तर","audio":"भाषा","season":"सिजन","files":"फाइलमा फर्कनुहोस्","select_quality":"गुणस्तर छान्नुहोस्","select_language":"भाषा छान्नुहोस्","select_season":"सिजन छान्नुहोस्","sendall":"सबै पठाउनुहोस्","remove_ads":"विज्ञापन हटाउनुहोस्","page":"पृष्ठ","next":"अर्को"}
 }
 
+_EXTRA_UI_LABELS = {
+ "en":{"update_channel":"ᴜᴘᴅᴀᴛᴇ ᴄʜᴀɴɴᴇʟ","main_channel":"ᴍᴀɪɴ ᴄʜᴀɴɴᴇʟ","movie_group":"ᴍᴏᴠɪᴇ ɢʀᴏᴜᴘ","search_group":"sᴇᴀʀᴄʜ ɢʀᴏᴜᴘ","upi":"ᴜᴘɪ","send_payment":"sᴇɴᴅ ᴘᴀʏᴍᴇɴᴛ sᴄʀᴇᴇɴsʜᴏᴛ","admin":"ᴀᴅᴍɪɴ"},
+ "hi":{"update_channel":"अपडेट चैनल","main_channel":"मुख्य चैनल","movie_group":"मूवी ग्रुप","search_group":"सर्च ग्रुप","upi":"यूपीआई","send_payment":"पेमेंट स्क्रीनशॉट भेजें","admin":"एडमिन"},
+ "hl":{"update_channel":"UPDATE CHANNEL","main_channel":"MAIN CHANNEL","movie_group":"MOVIE GROUP","search_group":"SEARCH GROUP","upi":"UPI","send_payment":"PAYMENT SCREENSHOT BHEJO","admin":"ADMIN"},
+ "ta":{"update_channel":"புதுப்பிப்பு சேனல்","main_channel":"முக்கிய சேனல்","movie_group":"திரைப்படக் குழு","search_group":"தேடல் குழு","upi":"யூபிஐ","send_payment":"பணம் செலுத்திய ஸ்கிரீன்ஷாட்டை அனுப்பவும்","admin":"நிர்வாகி"},
+ "te":{"update_channel":"అప్‌డేట్ ఛానల్","main_channel":"ప్రధాన ఛానల్","movie_group":"సినిమా గ్రూప్","search_group":"సెర్చ్ గ్రూప్","upi":"యూపీఐ","send_payment":"చెల్లింపు స్క్రీన్‌షాట్ పంపండి","admin":"అడ్మిన్"},
+ "kn":{"update_channel":"ಅಪ್‌ಡೇಟ್ ಚಾನೆಲ್","main_channel":"ಮುಖ್ಯ ಚಾನೆಲ್","movie_group":"ಚಲನಚಿತ್ರ ಗುಂಪು","search_group":"ಹುಡುಕಾಟ ಗುಂಪು","upi":"ಯುಪಿಐ","send_payment":"ಪಾವತಿ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಕಳುಹಿಸಿ","admin":"ನಿರ್ವಾಹಕ"},
+ "ml":{"update_channel":"അപ്‌ഡേറ്റ് ചാനൽ","main_channel":"പ്രധാന ചാനൽ","movie_group":"സിനിമാ ഗ്രൂപ്പ്","search_group":"തിരയൽ ഗ്രൂപ്പ്","upi":"യുപിഐ","send_payment":"പേയ്മെന്റ് സ്ക്രീൻഷോട്ട് അയയ്ക്കുക","admin":"അഡ്മിൻ"},
+ "bn":{"update_channel":"আপডেট চ্যানেল","main_channel":"মূল চ্যানেল","movie_group":"মুভি গ্রুপ","search_group":"সার্চ গ্রুপ","upi":"ইউপিআই","send_payment":"পেমেন্ট স্ক্রিনশট পাঠান","admin":"অ্যাডমিন"},
+ "mr":{"update_channel":"अपडेट चॅनेल","main_channel":"मुख्य चॅनेल","movie_group":"मूव्ही ग्रुप","search_group":"सर्च ग्रुप","upi":"यूपीआय","send_payment":"पेमेंट स्क्रीनशॉट पाठवा","admin":"ॲडमिन"},
+ "gu":{"update_channel":"અપડેટ ચેનલ","main_channel":"મુખ્ય ચેનલ","movie_group":"મૂવી ગ્રુપ","search_group":"સર્ચ ગ્રુપ","upi":"યુપીઆઈ","send_payment":"પેમેન્ટ સ્ક્રીનશોટ મોકલો","admin":"એડમિન"},
+ "pa":{"update_channel":"ਅੱਪਡੇਟ ਚੈਨਲ","main_channel":"ਮੁੱਖ ਚੈਨਲ","movie_group":"ਮੂਵੀ ਗਰੁੱਪ","search_group":"ਖੋਜ ਗਰੁੱਪ","upi":"ਯੂਪੀਆਈ","send_payment":"ਭੁਗਤਾਨ ਸਕ੍ਰੀਨਸ਼ਾਟ ਭੇਜੋ","admin":"ਐਡਮਿਨ"},
+ "ur":{"update_channel":"اپ ڈیٹ چینل","main_channel":"مرکزی چینل","movie_group":"مووی گروپ","search_group":"سرچ گروپ","upi":"یو پی آئی","send_payment":"ادائیگی کا اسکرین شاٹ بھیجیں","admin":"ایڈمن"},
+ "as":{"update_channel":"আপডেট চেনেল","main_channel":"মুখ্য চেনেল","movie_group":"চলচ্চিত্ৰ গ্ৰুপ","search_group":"সন্ধান গ্ৰুপ","upi":"ইউপিআই","send_payment":"পেমেণ্টৰ স্ক্ৰীণশ্বট পঠিয়াওক","admin":"এডমিন"},
+ "ne":{"update_channel":"अपडेट च्यानल","main_channel":"मुख्य च्यानल","movie_group":"चलचित्र समूह","search_group":"खोज समूह","upi":"यूपीआई","send_payment":"भुक्तानी स्क्रिनसट पठाउनुहोस्","admin":"एडमिन"}
+}
+
 async def _ui_label(user_id, key):
     try:
         code = await db.get_language(user_id) or "en"
     except Exception:
         code = "en"
-    return _UI_LABELS.get(code, _UI_LABELS["en"]).get(key, _UI_LABELS["en"].get(key, key.upper()))
+    return _EXTRA_UI_LABELS.get(code, _EXTRA_UI_LABELS["en"]).get(key, _UI_LABELS.get(code, _UI_LABELS["en"]).get(key, key.upper()))
 
 logger.setLevel(logging.ERROR)
 
@@ -1654,7 +1671,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data == "source":
         buttons = [[
-            InlineKeyboardButton('ADMIN📜', callback_data='ct:start'),
+            InlineKeyboardButton(await _ui_label(query.from_user.id, 'admin') + ' 📜', callback_data='ct:start'),
             InlineKeyboardButton('⇋ ' + await _ui_label(query.from_user.id, 'back') + ' ⇋', callback_data='about')
         ]]
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -1666,8 +1683,8 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
     elif query.data == "ɢʀᴏᴜᴘ":
         buttons = [[
-            InlineKeyboardButton('SEARCH GROUP ', url='https://t.me/+LoJSMzUmcmQ2NWFl'),
-            InlineKeyboardButton('MOVIE GROUP ', url='https://t.me/+LoJSMzUmcmQ2NWFl') 
+            InlineKeyboardButton(await _ui_label(query.from_user.id, 'search_group'), url='https://t.me/+LoJSMzUmcmQ2NWFl'),
+            InlineKeyboardButton(await _ui_label(query.from_user.id, 'movie_group'), url='https://t.me/+LoJSMzUmcmQ2NWFl') 
         ],[
             InlineKeyboardButton('⇋ ' + await _ui_label(query.from_user.id, 'home') + ' ⇋', callback_data='start')
         ]]
@@ -1680,9 +1697,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
     
     elif query.data == "channel":
         buttons = [[
-            InlineKeyboardButton('UPDATE CHANNEL ִֶָ🔄', url='https://t.me/+lxxH2tOszhQ2ZTE1'),
-            InlineKeyboardButton('MAIN CHANNEL ִֶָ🍿', url='https://t.me/FilmsChor'),
-            InlineKeyboardButton('MOVIE GROUP 🎟️', url='https://t.me/+LoJSMzUmcmQ2NWFl') 
+            InlineKeyboardButton(await _ui_label(query.from_user.id, 'update_channel') + ' ִֶָ🔄', url='https://t.me/+lxxH2tOszhQ2ZTE1'),
+            InlineKeyboardButton(await _ui_label(query.from_user.id, 'main_channel') + ' ִֶָ🍿', url='https://t.me/FilmsChor'),
+            InlineKeyboardButton(await _ui_label(query.from_user.id, 'movie_group') + ' 🎟️', url='https://t.me/+LoJSMzUmcmQ2NWFl') 
         ], [ InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data='start')
         ]]
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -1731,7 +1748,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         try:
             btn = [[
                 InlineKeyboardButton('ꜱᴛᴀʀ', callback_data='star_info'),
-                InlineKeyboardButton('ᴜᴘɪ', callback_data='upi_info')
+                InlineKeyboardButton(await _ui_label(query.from_user.id, 'upi'), callback_data='upi_info')
             ],[
                 InlineKeyboardButton('⇋ ' + await _ui_label(query.from_user.id, 'premium') + ' ⇋', callback_data='premium_info')
             ]]
@@ -1748,7 +1765,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
     elif query.data == "upi_info":
         try:
             btn = [[
-                InlineKeyboardButton('• ꜱᴇɴᴅ  ᴘᴀʏᴍᴇɴᴛ ꜱᴄʀᴇᴇɴꜱʜᴏᴛ •', callback_data='ct:start'),
+                InlineKeyboardButton('• ' + await _ui_label(query.from_user.id, 'send_payment') + ' •', callback_data='ct:start'),
             ],[
                 InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data='buy_info')
             ]]
