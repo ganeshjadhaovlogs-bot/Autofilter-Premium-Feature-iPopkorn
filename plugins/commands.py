@@ -68,6 +68,15 @@ async def _show_language_picker(message, user_id):
         parse_mode=enums.ParseMode.HTML
     )
 
+async def _home_refer_label(user_id):
+    # Reuse the same per-user translation table as the referral screen.
+    try:
+        from .pmfilter import _ui_label
+        return await _ui_label(user_id, "refer")
+    except Exception:
+        return LANGUAGES["en"][9]
+
+
 async def _send_language_home(client, message, user, language):
     lang = LANGUAGES.get(language, LANGUAGES["en"])
     current_time = datetime.now(pytz.timezone(TIMEZONE))
@@ -78,6 +87,7 @@ async def _send_language_home(client, message, user, language):
         [InlineKeyboardButton(f"✧ {lang[4]} ✧", callback_data="channel"), InlineKeyboardButton(f"✧ {lang[5]} ✧", callback_data="ɢʀᴏᴜᴘ")],
         [InlineKeyboardButton(f"✧ {lang[6]} ✧", callback_data="help"), InlineKeyboardButton(f"✧ {lang[7]} ✧", callback_data="about")],
         [InlineKeyboardButton(f"✧ {lang[8]} ✧", callback_data="topsearch"), InlineKeyboardButton(f"✧ {lang[9]} ✧", callback_data="premium_info")],
+        [InlineKeyboardButton(f"✧ {await _home_refer_label(user.id)} ✧", callback_data="reffff")],
         [InlineKeyboardButton(f"🌐 {lang[10]}", callback_data="lang:change")]
     ]
     if user.id in ADMINS:
