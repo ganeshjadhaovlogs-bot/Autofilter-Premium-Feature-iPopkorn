@@ -82,6 +82,17 @@ class Database:
     async def is_user_exist(self, id):
         user = await self.col.find_one({'id':int(id)})
         return bool(user)
+
+    async def get_language(self, user_id):
+        user = await self.col.find_one({"id": int(user_id)}, {"language": 1})
+        return user.get("language") if user else None
+
+    async def set_language(self, user_id, language):
+        await self.col.update_one(
+            {"id": int(user_id)},
+            {"$set": {"language": language}},
+            upsert=True
+        )
     
     async def total_users_count(self):
         count = await self.col.count_documents({})
