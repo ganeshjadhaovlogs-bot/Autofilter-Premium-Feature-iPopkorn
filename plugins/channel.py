@@ -6,16 +6,16 @@ import re
 import logging
 import asyncio
 import aiohttp
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from plugins.Roaroicfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
-from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS, BOT_TOKEN
+from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER, ADMINS, BOT_TOKEN, MULTIPLE_DB
 from Script import script
-from database.ia_filterdb import save_file
+from database.ia_filterdb import save_file, Media, Media2
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from utils import temp
 from pymongo.errors import PyMongoError, DuplicateKeyError
@@ -304,54 +304,50 @@ def extract_media_info(filename: str, caption: str):
         "language": language
     }
 
-async def scan_matching_movie_uploads(bot, source_chat_id, target_base_name, current_message):
-    """Re-scan recent Telegram source-channel uploads for this movie only."""
-    cutoff = current_message.date - timedelta(hours=24)
-    scanned = matched = 0
+async def scan_matching_movie_uploads(bot, target_base_name):
+    """Scan MongoDB records for this movie only; bot accounts cannot read chat history."""
+    words = [re.escape(word) for word in target_base_name.split() if word]
+    if not words:
+        return
 
-    async for item in bot.get_chat_history(source_chat_id, limit=1000):
-        if item.date and item.date < cutoff:
-            break
+    # Search the indexed file-name field, then confirm using the same title parser
+    # used by the upload handler so similarly named movies are not mixed together.
+    filename_pattern = re.compile(r".*".join(words), re.IGNORECASE)
+    mongo_filter = {"file_name": filename_pattern}
+    collections = [Media]
+    if MULTIPLE_DB:
+        collections.append(Media2)
 
-        media_type = next(
-            (ft for ft in ("document", "video", "audio") if getattr(item, ft, None)),
-            None
-        )
-        if not media_type:
+    matching_files = []
+    for collection in collections:
+        try:
+            records = await collection.find(mongo_filter).sort("$natural", -1).limit(1000).to_list(length=1000)
+            matching_files.extend(records)
+        except Exception:
+            logger.exception("Could not scan matching movie records in %s", collection.__name__)
+            raise
+
+    processed_count = 0
+    seen = set()
+    for record in matching_files:
+        filename = getattr(record, "file_name", "") or ""
+        if not filename or filename in seen:
+            continue
+        caption = getattr(record, "caption", None) or ""
+        media_info = extract_media_info(filename, caption)
+        if media_info["base_name"].casefold() != target_base_name.casefold():
             continue
 
-        media = getattr(item, media_type)
-        filename = getattr(media, "file_name", None)
-        if not filename:
-            continue
-
-        caption = item.caption or ""
-        info = extract_media_info(filename, caption)
-        if info["base_name"].casefold() != target_base_name.casefold():
-            continue
-
-        matched += 1
-        media.file_type = media_type
-        media.caption = caption
-        media.duration = getattr(media, "duration", None)
-
-        # info=0 means the file already exists in MongoDB. Still process it:
-        # this repairs a missed movie_updates record without duplicating the file.
-        success, save_status = await save_file(media)
-        if not success and save_status not in (0,):
-            logger.warning("Could not index matching source file '%s' (status %s)", filename, save_status)
-            continue
-
+        seen.add(filename)
         await process_and_send_update(
-            bot, filename, caption, media.duration
+            bot, filename, caption, getattr(record, "duration", None)
         )
-        scanned += 1
+        processed_count += 1
 
     logger.info(
-        "Matching Telegram scan completed for '%s': %s/%s matching files processed (last 24h)",
-        target_base_name, scanned, matched
+        "Matching MongoDB scan completed for '%s': %s matching files processed",
+        target_base_name, processed_count
     )
-
 
 @Client.on_message(filters.chat(CHANNELS) & MEDIA_FILTER)
 async def media_handler(bot, message):
@@ -377,16 +373,14 @@ async def media_handler(bot, message):
         if not await db.movie_update_status(bot.me.id):
             return
 
-        # Save the triggering upload, then scan only its matching movie in the
-        # source Telegram channel. Other movie titles are never processed here.
+        # Save the triggering upload, then scan only matching records in MongoDB.
+        # Telegram bots cannot call messages.GetHistory / get_chat_history.
         success, save_status = await save_file(media)
         if not success and save_status not in (0,):
             return
 
         target_base_name = extract_media_info(filename, caption)["base_name"]
-        await scan_matching_movie_uploads(
-            bot, message.chat.id, target_base_name, message
-        )
+        await scan_matching_movie_uploads(bot, target_base_name)
     except Exception:
         logger.exception("Error processing/scanning matching movie uploads")
 
