@@ -83,7 +83,7 @@ async def _send_language_home(client, message, user, language):
     if user.id in ADMINS:
         buttons.append([InlineKeyboardButton(f"👑 {lang[11]} 👑", callback_data="ap:home")])
     caption = f"<b>👋 ʜᴇʏ {user.mention}, {greeting}</b>\n\n<blockquote>Mʏ Nᴀᴍᴇ Is <a href=\"https://t.me/{temp.U_NAME}\">{temp.B_NAME}</a>, I Cᴀɴ Hᴇʟᴘ Yᴏᴜ Fɪɴᴅ Mᴏᴠɪᴇs Aɴᴅ Sᴇʀɪᴇs.</blockquote>"
-    await message.reply_photo(photo=random.choice(PICS), caption=caption, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
+    await client.send_photo(chat_id=message.chat.id, photo=random.choice(PICS), caption=caption, reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
 
 
 @Client.on_message(filters.command("start") & filters.incoming)
